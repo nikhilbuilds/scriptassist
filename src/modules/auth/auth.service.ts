@@ -81,6 +81,12 @@ export class AuthService {
   }
 
   async validateUserRoles(userId: string, requiredRoles: string[]): Promise<boolean> {
-    return true;
+    const user = await this.usersService.findOne(userId);
+    
+    if (!user) {
+      return false;
+    }
+    
+    return requiredRoles.includes(user.role);
   }
 } 
