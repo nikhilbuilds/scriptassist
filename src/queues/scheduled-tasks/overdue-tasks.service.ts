@@ -6,6 +6,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { Task } from '../../modules/tasks/entities/task.entity';
 import { TaskStatus } from '../../modules/tasks/enums/task-status.enum';
+import { TasksService } from '@modules/tasks/tasks.service';
 
 @Injectable()
 export class OverdueTasksService {
@@ -14,8 +15,8 @@ export class OverdueTasksService {
   constructor(
     @InjectQueue('task-processing')
     private taskQueue: Queue,
-    @InjectRepository(Task)
-    private tasksRepository: Repository<Task>,
+    // @InjectRepository(Task)
+    private tasksService: TasksService,
   ) {}
 
   // TODO: Implement the overdue tasks checker
@@ -30,15 +31,9 @@ export class OverdueTasksService {
     // 3. Log the number of overdue tasks found
 
     // Example implementation (incomplete - to be implemented by candidates)
-    const now = new Date();
-    const overdueTasks = await this.tasksRepository.find({
-      where: {
-        dueDate: LessThan(now),
-        status: TaskStatus.PENDING,
-      },
-    });
+    const overdueTasks = await this.tasksService.findOverdueTasks();
 
-    this.logger.log(`Found ${overdueTasks.length} overdue tasks`);
+    // this.logger.log(`Found ${overdueTasks.length} overdue tasks`);
 
     // Add tasks to the queue to be processed
     // TODO: Implement adding tasks to the queue

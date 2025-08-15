@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import { Task } from './entities/task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -96,7 +96,18 @@ export class TasksService {
   async updateStatus(id: string, status: string): Promise<Task> {
     // This method will be called by the task processor
     const task = await this.findOne(id);
-    task.status = status as any;
+    task.status = status as TaskStatus;
     return this.tasksRepository.save(task);
+  }
+
+  async findOverdueTasks(): Promise<Task[]> {
+    const now = new Date();
+
+    return await this.tasksRepository.find({
+      where: {
+        dueDate: LessThan(now),
+        status: TaskStatus.PENDING,
+      },
+    });
   }
 }

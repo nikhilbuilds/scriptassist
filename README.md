@@ -38,37 +38,33 @@ The TaskFlow API is a task management system with significant scalability, perfo
    # Update the .env file with your database and Redis connection details
    ```
 4. Database Setup:
-
+   
    Ensure your PostgreSQL database is running, then create a database:
-
    ```bash
    # Using psql
    psql -U postgres
    CREATE DATABASE taskflow;
    \q
-
+   
    # Or using createdb
    createdb -U postgres taskflow
    ```
-
+   
    Build the TypeScript files to ensure the migrations can be run:
-
    ```bash
    bun run build
    ```
 
 5. Run database migrations:
-
    ```bash
    # Option 1: Standard migration (if "No migrations are pending" but tables aren't created)
    bun run migration:run
-
+   
    # Option 2: Force table creation with our custom script
    bun run migration:custom
    ```
-
+   
    Our custom migration script will:
-
    - Try to run formal migrations first
    - If no migrations are executed, it will directly create the necessary tables
    - It provides detailed logging to help troubleshoot database setup issues
@@ -77,6 +73,7 @@ The TaskFlow API is a task management system with significant scalability, perfo
    ```bash
    bun run seed
    ```
+   
 7. Start the development server:
    ```bash
    bun run start:dev
@@ -87,19 +84,17 @@ The TaskFlow API is a task management system with significant scalability, perfo
 If you continue to have issues with database connections:
 
 1. Check that PostgreSQL is properly installed and running:
-
    ```bash
    # On Linux/Mac
    systemctl status postgresql
    # or
    pg_isready
-
+   
    # On Windows
    sc query postgresql
    ```
 
 2. Verify your database credentials by connecting manually:
-
    ```bash
    psql -h localhost -U postgres -d taskflow
    ```
@@ -113,7 +108,6 @@ If you continue to have issues with database connections:
 The seeded database includes two users:
 
 1. Admin User:
-
    - Email: admin@example.com
    - Password: admin123
    - Role: admin
@@ -246,12 +240,10 @@ Your solution will be evaluated on:
 The API should expose the following endpoints:
 
 ### Authentication
-
 - `POST /auth/login` - Authenticate a user
 - `POST /auth/register` - Register a new user
 
 ### Tasks
-
 - `GET /tasks` - List tasks with filtering and pagination
 - `GET /tasks/:id` - Get task details
 - `POST /tasks` - Create a task
@@ -260,3 +252,21 @@ The API should expose the following endpoints:
 - `POST /tasks/batch` - Batch operations on tasks
 
 Good luck! This challenge is designed to test the skills of experienced engineers in creating scalable, maintainable, and secure systems.
+
+# List of Updates.
+
+## 1. Formatting.
+
+### Prettier was emitting several lint errors which were resolved in this commit <add commit here> . This is important since consistent styling is improtant for a large codebase as it enhances readability and maintainability.
+
+## 2. Blocking Error Fix - 
+
+### ERROR [ExceptionHandler] Nest can't resolve dependencies of the OverdueTasksService (BullQueue_task-processing, ?). Please make sure that the argument "TaskRepository" at index [1] is available in the ScheduledTasksModule context. The following error was blocking initial updates - 
+
+### The fix - Remove tight coupling, OverdueTasksService should not call TaskRespository. It should only call TasksService. A refactor was performed as well.
+
+## 3. Blocking Error Fix - 
+
+### ERROR [ExceptionHandler] Nest can't resolve dependencies of the OverdueTasksService (BullQueue_task-processing, ?). Please make sure that the argument "TaskRepository" at index [1] is available in the ScheduledTasksModule context. The following error was blocking initial updates - 
+
+### The fix - Remove tight coupling, OverdueTasksService should not call TaskRespository. It should only call TasksService. A refactor was performed as well.
