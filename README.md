@@ -267,6 +267,7 @@ Good luck! This challenge is designed to test the skills of experienced engineer
 
 ## 3. Blocking Error Fix - 
 
-### ERROR [ExceptionHandler] Nest can't resolve dependencies of the OverdueTasksService (BullQueue_task-processing, ?). Please make sure that the argument "TaskRepository" at index [1] is available in the ScheduledTasksModule context. The following error was blocking initial updates - 
+### ERROR RROR [ExceptionHandler] JwtStrategy requires a secret or key
+TypeError: JwtStrategy requires a secret or key - 
 
-### The fix - Remove tight coupling, OverdueTasksService should not call TaskRespository. It should only call TasksService. A refactor was performed as well.
+### The fix - Wrong env key . Changed from jwt.secret to JWT_SECRET
