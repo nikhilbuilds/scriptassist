@@ -20,8 +20,8 @@ export class User {
   @Column({ default: 'user' })
   role: string;
 
-  @OneToMany(() => Task, (task) => task.user)
-  tasks: Task[];
+  @OneToMany('Task', 'user')
+  tasks: any[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

@@ -34,9 +34,9 @@ export class Task {
   @Column({ name: 'user_id' })
   userId: string;
 
-  @ManyToOne(() => User, (user) => user.tasks)
+  @ManyToOne('User', 'tasks')
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user: any;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
