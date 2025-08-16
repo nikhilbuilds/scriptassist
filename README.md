@@ -313,6 +313,13 @@ TypeError: JwtStrategy requires a secret or key -
 ## Made rate limiting more secure and performant. Replaced in - memory cache with redis and updated the rale limiting mechnism to leverage redis's expire functionlity to store the count. This makes the ratelimiting a lot faster. Ip addresses are hashed so no secure info is stored in redis.
 
 
+## 13. Ineffective error handling strategies
+
+## Updated the logger to display error messages with clear contextual information and response times are logged as well.
+
+## 14. Missing retry mechanisms for distributed operations, improved error handling for scheduled tasks and queues.
+
+
 
 
 ## End Note - 
