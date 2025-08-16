@@ -18,7 +18,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { TaskStatus } from './enums/task-status.enum';
 import { TaskFilterDto } from './dto/task-filter.dto';
-import { PaginationMetaData } from '../../types/pagination.interface';
+import { PaginationMetaData, PaginationOptions } from '../../types/pagination.interface';
 import { TaskPriority } from './enums/task-priority.enum';
 
 @Injectable()
@@ -139,25 +139,55 @@ export class TasksService {
     return { message: 'Task deleted successfully' };
   }
 
-  async findByStatus(status: TaskStatus): Promise<Task[]> {
-    // Inefficient implementation: doesn't use proper repository patterns
-    const query = 'SELECT * FROM tasks WHERE status = $1';
-    return this.tasksRepository.query(query, [status]);
+  async findByStatus(
+    status: TaskStatus,
+    pagination: PaginationOptions,
+  ): Promise<{ tasks: Task[]; metaData: PaginationMetaData }> {
+    const page = pagination.page || 1;
+    const limit = pagination.limit || 10;
+    const dbResponse = await this.tasksRepository.findAndCount({
+      where: { status },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return {
+      tasks: dbResponse[0],
+      metaData: {
+        total: dbResponse[1],
+        page,
+        limit,
+        totalPages: Math.ceil(dbResponse[1] / limit),
+      },
+    };
   }
 
   async updateStatus(id: string, status: TaskStatus): Promise<Task> {
     return this.tasksRepository.save({ id, status });
   }
 
-  async findOverdueTasks(): Promise<Task[]> {
+  async findOverdueTasks(
+    pagination: PaginationOptions,
+  ): Promise<{ tasks: Task[]; metaData: PaginationMetaData }> {
     const now = new Date();
-
-    return await this.tasksRepository.find({
+    const page = pagination.page || 1;
+    const limit = pagination.limit || 10;
+    const dbResponse = await this.tasksRepository.findAndCount({
       where: {
         dueDate: LessThan(now),
         status: TaskStatus.PENDING,
       },
+      skip: (page - 1) * limit,
+      take: limit,
     });
+    return {
+      tasks: dbResponse[0],
+      metaData: {
+        total: dbResponse[1],
+        page,
+        limit,
+        totalPages: Math.ceil(dbResponse[1] / limit),
+      },
+    };
   }
 
   async batchProcess(operations: { taskIds: string[]; action: string }): Promise<number> {

@@ -31,7 +31,7 @@ export class OverdueTasksService {
     // 3. Log the number of overdue tasks found
 
     // Example implementation (incomplete - to be implemented by candidates)
-    const overdueTasks = await this.tasksService.findOverdueTasks();
+    const overdueTasks = await this.tasksService.findOverdueTasks({});
 
     // this.logger.log(`Found ${overdueTasks.length} overdue tasks`);
 
