@@ -304,6 +304,10 @@ TypeError: JwtStrategy requires a secret or key -
 
 ## Add Role Gaurds and verify object level access.
 
+## 11. Unprotected sensitive data exposure in error responses
+
+## Clean error responses for any sensitive data
+
 
 
 ## End Note - 

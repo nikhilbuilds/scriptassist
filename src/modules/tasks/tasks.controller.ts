@@ -68,12 +68,9 @@ export class TasksController {
   @ApiOperation({ summary: 'Find a task by ID' })
   async findOne(@Req() request: Request, @Param('id') id: string) {
     const task = await this.tasksService.findOne(id, (request.user as User).id);
-
     if (!task) {
-      // Inefficient error handling: Revealing internal details
-      throw new HttpException(`Task with ID ${id} not found in the database`, HttpStatus.NOT_FOUND);
+      throw new HttpException(`Task not found`, HttpStatus.NOT_FOUND);
     }
-
     return task;
   }
 

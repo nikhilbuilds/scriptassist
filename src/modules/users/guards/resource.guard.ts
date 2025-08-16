@@ -9,9 +9,6 @@ export class ResourceGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const { user, params } = request;
-
-    console.log(user);
-
     return user.role === Role.ADMIN || (user.role === Role.USER && params.id === user.id);
   }
 }

@@ -54,7 +54,6 @@ export class RateLimitGuard implements CanActivate {
           message: `You have exceeded the ${maxRequests} requests per ${windowMs / 1000} seconds limit.`,
           limit: maxRequests,
           current: requestRecords[ip].length,
-          ip: ip, // Exposing the IP in the response is a security risk
           remaining: 0,
           nextValidRequestTime: requestRecords[ip][0].timestamp + windowMs,
         },
