@@ -308,11 +308,16 @@ TypeError: JwtStrategy requires a secret or key -
 
 ## Clean error responses for any sensitive data
 
+## 12. Improve rate limiting mechanism
+
+## Made rate limiting more secure and performant. Replaced in - memory cache with redis and updated the rale limiting mechnism to leverage redis's expire functionlity to store the count. This makes the ratelimiting a lot faster. Ip addresses are hashed so no secure info is stored in redis.
+
+
 
 
 ## End Note - 
 
-## Create a cache mod
+## Create a cache module
 ## There are no domain examples that need transactions, they are only needed when updating different tables or rows and all the operations need to succeed. If one fails the rest must be rolled back
 ## common service to paginate a repositories response.
 ## Create a transaction management utility.

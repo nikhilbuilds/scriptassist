@@ -20,17 +20,20 @@ import { PaginationDto } from '@common/dto/pagination.dto';
 import { RolesGuard } from '@common/guards/roles.guard';
 import { Roles } from '@common/decorators/roles.decorator';
 import { ResourceGuard } from './guards/resource.guard';
+import { RateLimitGuard } from '@common/guards/rate-limit.guard';
+import { RateLimit } from '@common/decorators/rate-limit.decorator';
 
 @ApiTags('users')
 @Controller('users')
 @UseInterceptors(ClassSerializerInterceptor)
+@UseGuards(JwtAuthGuard, RateLimitGuard)
+@RateLimit({ limit: 100, windowMs: 60000 })
 @ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Roles('admin')
   @UseGuards(RolesGuard)
-  @UseGuards(JwtAuthGuard)
   @Post()
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
@@ -38,7 +41,6 @@ export class UsersController {
 
   @Roles('admin')
   @UseGuards(RolesGuard)
-  @UseGuards(JwtAuthGuard)
   @Get()
   @ApiOperation({ summary: 'Get users' })
   async findAll(@Query() paginationDto: PaginationDto) {
@@ -50,14 +52,12 @@ export class UsersController {
   }
 
   @UseGuards(ResourceGuard)
-  @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
   @UseGuards(ResourceGuard)
-  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(id, updateUserDto);
@@ -65,7 +65,6 @@ export class UsersController {
 
   @Roles('admin')
   @UseGuards(RolesGuard)
-  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
