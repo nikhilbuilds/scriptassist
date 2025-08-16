@@ -1352,3 +1352,472 @@ this.logger.error(`Validation failed: ${error.message}`);
 - Regularly review security logs
 
 This comprehensive security implementation provides a robust foundation for protecting the application against common security threats while maintaining flexibility for future enhancements.
+
+
+# Resilience & Observability Implementation
+
+This document outlines the comprehensive Resilience & Observability features implemented in the NestJS Task Management System.
+
+## 🎯 **Overview**
+
+The system now includes enterprise-grade resilience patterns and comprehensive observability capabilities to ensure high availability, fault tolerance, and complete system visibility.
+
+## 🛡️ **Resilience Features**
+
+### 1. **Circuit Breaker Pattern**
+
+The `ResilienceService` implements the Circuit Breaker pattern to prevent cascading failures and provide graceful degradation.
+
+#### **Circuit Breaker States:**
+- **CLOSED**: Normal operation, requests pass through
+- **OPEN**: Circuit is open, requests fail fast
+- **HALF_OPEN**: Testing if service has recovered
+
+#### **Configuration:**
+```typescript
+const options: ResilienceOptions = {
+  circuitBreaker: {
+    failureThreshold: 5,        // Failures before opening circuit
+    recoveryTimeout: 30000,     // 30 seconds before retry
+    expectedResponseTime: 1000, // 1 second threshold
+  }
+};
+```
+
+#### **Usage Example:**
+```typescript
+// In any service
+const result = await this.resilienceService.executeWithResilience(
+  'database-query',
+  () => this.databaseService.query(),
+  {
+    circuitBreaker: { failureThreshold: 3, recoveryTimeout: 15000 },
+    retry: { maxAttempts: 2, backoffDelay: 1000 }
+  }
+);
+```
+
+### 2. **Retry Mechanisms**
+
+Automatic retry with exponential backoff for transient failures.
+
+#### **Retry Options:**
+```typescript
+const retryOptions: RetryOptions = {
+  maxAttempts: 3,           // Maximum retry attempts
+  backoffDelay: 1000,       // Base delay (1 second)
+  maxDelay: 10000,          // Maximum delay (10 seconds)
+};
+```
+
+#### **Backoff Strategy:**
+- Attempt 1: 1 second delay
+- Attempt 2: 2 seconds delay  
+- Attempt 3: 4 seconds delay
+- Maximum: 10 seconds delay
+
+### 3. **Timeout Handling**
+
+Configurable timeouts with fallback strategies.
+
+#### **Timeout Options:**
+```typescript
+const timeoutOptions: TimeoutOptions = {
+  timeout: 5000,            // 5 second timeout
+  fallback: () => 'default-value' // Fallback function
+};
+```
+
+### 4. **Fallback Strategies**
+
+Graceful degradation when services are unavailable.
+
+```typescript
+// Example: Fallback to cached data when database is slow
+const result = await this.resilienceService.executeWithResilience(
+  'user-profile',
+  () => this.userService.getProfile(userId),
+  {
+    timeout: { 
+      timeout: 2000,
+      fallback: () => this.cacheService.getUserProfile(userId)
+    }
+  }
+);
+```
+
+## 📊 **Observability Features**
+
+### 1. **Health Checks**
+
+Comprehensive health monitoring for all system components.
+
+#### **Health Check Endpoints:**
+- `GET /health` - Full system health check
+- `GET /health/ready` - Readiness probe (Kubernetes)
+- `GET /health/live` - Liveness probe (Kubernetes)
+- `GET /health/startup` - Startup probe (Kubernetes)
+
+#### **Health Check Components:**
+- **Database**: Connection and query capability
+- **Redis**: Cache connectivity and health
+- **Queues**: BullMQ job processing status
+- **Memory**: Heap usage and memory pressure
+- **Disk**: Storage availability
+- **External Services**: API dependencies
+
+#### **Health Status Levels:**
+- **Healthy**: All components operational
+- **Degraded**: Some components experiencing issues
+- **Unhealthy**: Critical components failing
+
+### 2. **Enhanced Logging**
+
+Structured logging with contextual information and metrics.
+
+#### **Log Levels:**
+- **ERROR**: System errors and failures
+- **WARN**: Warning conditions
+- **INFO**: General information
+- **DEBUG**: Detailed debugging
+- **VERBOSE**: Very detailed information
+
+#### **Contextual Logging:**
+```typescript
+// Log with context
+this.loggingService.logAuthEvent('login', userId, true, {
+  ip: request.ip,
+  userAgent: request.headers['user-agent'],
+  timestamp: new Date()
+});
+
+// Log API requests with timing
+const logResponse = this.loggingService.logApiRequest(
+  'POST', 
+  '/tasks', 
+  userId, 
+  requestId
+);
+
+// ... perform operation ...
+
+logResponse(); // Logs response with duration
+```
+
+#### **Log Metrics:**
+- Total log count by level
+- Logs by operation type
+- Average response times
+- Error rates and trends
+
+### 3. **Performance Monitoring**
+
+Real-time performance metrics and analysis.
+
+#### **Performance Endpoints:**
+- `GET /observability/performance` - Overall performance metrics
+- `GET /observability/performance/queries` - Database performance
+- `GET /observability/performance/cache` - Cache performance
+
+#### **Metrics Collected:**
+- **System Resources**: CPU, memory, disk usage
+- **Database**: Query performance, slow queries, connection pool
+- **Cache**: Hit rates, miss rates, Redis statistics
+- **API**: Response times, throughput, error rates
+
+### 4. **Resilience Monitoring**
+
+Circuit breaker status and resilience pattern metrics.
+
+#### **Resilience Endpoints:**
+- `GET /observability/resilience` - Circuit breaker status
+- `GET /observability/summary` - Comprehensive system overview
+
+#### **Circuit Breaker Metrics:**
+- Current state (CLOSED/OPEN/HALF_OPEN)
+- Failure and success counts
+- Last failure timestamp
+- Next retry attempt time
+
+## 🚀 **Usage Examples**
+
+### 1. **Implementing Resilience in Services**
+
+```typescript
+@Injectable()
+export class TaskService {
+  constructor(
+    private readonly resilienceService: ResilienceService,
+    private readonly loggingService: EnhancedLoggingService,
+  ) {}
+
+  async createTask(createTaskDto: CreateTaskDto): Promise<Task> {
+    const logContext = { userId: createTaskDto.userId, operation: 'create_task' };
+    
+    try {
+      const task = await this.resilienceService.executeWithResilience(
+        'create-task',
+        () => this.taskRepository.save(createTaskDto),
+        {
+          circuitBreaker: { failureThreshold: 3 },
+          retry: { maxAttempts: 2 },
+          timeout: { timeout: 5000 }
+        }
+      );
+
+      this.loggingService.logBusinessEvent(
+        'task_created',
+        'task',
+        task.id,
+        createTaskDto.userId,
+        logContext
+      );
+
+      return task;
+    } catch (error) {
+      this.loggingService.error(
+        'Failed to create task',
+        logContext,
+        error instanceof Error ? error : new Error('Unknown error')
+      );
+      throw error;
+    }
+  }
+}
+```
+
+### 2. **Health Check Integration**
+
+```typescript
+// In Kubernetes deployment
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+startupProbe:
+  httpGet:
+    path: /health/startup
+    port: 3000
+  failureThreshold: 30
+  periodSeconds: 10
+```
+
+### 3. **Monitoring and Alerting**
+
+```typescript
+// Example: Monitor circuit breaker status
+@Cron('*/30 * * * * *') // Every 30 seconds
+async monitorCircuitBreakers() {
+  const status = this.resilienceService.getCircuitBreakerStatus();
+  
+  Object.entries(status).forEach(([name, cb]) => {
+    if (cb.state === 'OPEN') {
+      this.loggingService.warn(`Circuit breaker ${name} is OPEN`, {
+        operation: 'circuit_breaker_monitoring',
+        circuitBreaker: name,
+        failureCount: cb.failureCount,
+        lastFailure: cb.lastFailureTime
+      });
+    }
+  });
+}
+```
+
+## 🔧 **Configuration**
+
+### 1. **Environment Variables**
+
+```env
+# Resilience Configuration
+RESILIENCE_CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
+RESILIENCE_CIRCUIT_BREAKER_RECOVERY_TIMEOUT=30000
+RESILIENCE_RETRY_MAX_ATTEMPTS=3
+RESILIENCE_RETRY_BACKOFF_DELAY=1000
+
+# Health Check Configuration
+HEALTH_CHECK_TIMEOUT=10000
+HEALTH_CHECK_INTERVAL=30000
+
+# Logging Configuration
+LOG_LEVEL=info
+LOG_MAX_ENTRIES=10000
+```
+
+### 2. **Service Configuration**
+
+```typescript
+// app.module.ts
+@Module({
+  providers: [
+    {
+      provide: 'RESILIENCE_CONFIG',
+      useValue: {
+        defaultCircuitBreaker: {
+          failureThreshold: 5,
+          recoveryTimeout: 30000,
+        },
+        defaultRetry: {
+          maxAttempts: 3,
+          backoffDelay: 1000,
+        }
+      }
+    }
+  ]
+})
+```
+
+## 📈 **Monitoring Dashboard**
+
+### 1. **Health Status Dashboard**
+
+- Real-time system health indicators
+- Component status and response times
+- Historical health trends
+
+### 2. **Performance Dashboard**
+
+- Response time percentiles
+- Throughput metrics
+- Resource utilization graphs
+
+### 3. **Resilience Dashboard**
+
+- Circuit breaker states
+- Failure rates and recovery times
+- Retry attempt statistics
+
+### 4. **Logging Dashboard**
+
+- Log volume by level
+- Error rate trends
+- Request/response patterns
+
+## 🚨 **Alerting and Notifications**
+
+### 1. **Health Check Alerts**
+
+- System unhealthy notifications
+- Component failure alerts
+- Recovery confirmations
+
+### 2. **Performance Alerts**
+
+- Response time thresholds
+- Error rate spikes
+- Resource exhaustion warnings
+
+### 3. **Resilience Alerts**
+
+- Circuit breaker openings
+- High failure rates
+- Recovery timeouts
+
+## 🧪 **Testing Resilience**
+
+### 1. **Circuit Breaker Testing**
+
+```typescript
+describe('ResilienceService', () => {
+  it('should open circuit breaker after failures', async () => {
+    // Simulate failures
+    for (let i = 0; i < 5; i++) {
+      try {
+        await service.executeWithResilience('test', () => Promise.reject(new Error('Test failure')));
+      } catch (error) {
+        // Expected
+      }
+    }
+
+    // Circuit should be open
+    const status = service.getCircuitBreakerStatus();
+    expect(status.test.state).toBe('OPEN');
+  });
+});
+```
+
+### 2. **Health Check Testing**
+
+```typescript
+describe('HealthController', () => {
+  it('should return healthy status when all services are up', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/health')
+      .expect(200);
+
+    expect(response.body.status).toBe('healthy');
+    expect(response.body.checks.database.status).toBe('healthy');
+    expect(response.body.checks.redis.status).toBe('healthy');
+  });
+});
+```
+
+## 🔍 **Troubleshooting**
+
+### 1. **Common Issues**
+
+- **Circuit Breaker Stuck Open**: Check recovery timeout configuration
+- **High Error Rates**: Review failure thresholds and retry policies
+- **Health Check Failures**: Verify service dependencies and connectivity
+
+### 2. **Debugging Commands**
+
+```bash
+# Check health status
+curl http://localhost:3000/health
+
+# View circuit breaker status
+curl http://localhost:3000/observability/resilience
+
+# Get recent logs
+curl http://localhost:3000/observability/logs/recent
+
+# Performance summary
+curl http://localhost:3000/observability/summary
+```
+
+## 📚 **Best Practices**
+
+### 1. **Resilience Patterns**
+
+- Use appropriate failure thresholds for different services
+- Implement meaningful fallback strategies
+- Monitor and adjust timeout values based on performance data
+
+### 2. **Health Checks**
+
+- Keep health checks lightweight and fast
+- Include all critical dependencies
+- Set appropriate timeouts and intervals
+
+### 3. **Logging**
+
+- Use structured logging with consistent context
+- Avoid logging sensitive information
+- Implement log rotation and retention policies
+
+### 4. **Monitoring**
+
+- Set up proactive alerting
+- Monitor trends and patterns
+- Use metrics for capacity planning
+
+## 🎉 **Benefits**
+
+1. **High Availability**: Circuit breakers prevent cascading failures
+2. **Fault Tolerance**: Automatic retry and fallback mechanisms
+3. **Visibility**: Complete system observability and monitoring
+4. **Operational Excellence**: Proactive issue detection and resolution
+5. **Scalability**: Performance monitoring for capacity planning
+6. **Compliance**: Comprehensive audit trails and logging
+
+This implementation provides enterprise-grade resilience and observability, ensuring the system can handle failures gracefully while providing complete visibility into its operation.

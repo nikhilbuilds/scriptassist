@@ -13,7 +13,12 @@ import { ScheduledTasksModule } from './queues/scheduled-tasks/scheduled-tasks.m
 import { RedisCacheService } from './common/services/redis-cache.service';
 import { PerformanceMonitorService } from './common/services/performance-monitor.service';
 import { PerformanceController } from './common/controllers/performance.controller';
+import { HealthController } from './common/controllers/health.controller';
+import { ObservabilityController } from './common/controllers/observability.controller';
 import { TransactionService } from './common/services/transaction.service';
+import { HealthCheckService } from './common/services/health-check.service';
+import { ResilienceService } from './common/services/resilience.service';
+import { EnhancedLoggingService } from './common/services/enhanced-logging.service';
 import { SecureValidationPipe } from './common/pipes/secure-validation.pipe';
 import { SecureRateLimitGuard } from './common/guards/secure-rate-limit.guard';
 import jwtConfig from './config/jwt.config';
@@ -84,12 +89,18 @@ import jwtConfig from './config/jwt.config';
   ],
   controllers: [
     PerformanceController,
+    HealthController,
+    ObservabilityController,
   ],
   providers: [
     // Redis-based cache service for better performance and scalability
     RedisCacheService,
     PerformanceMonitorService,
     TransactionService,
+    // Health and resilience services
+    HealthCheckService,
+    ResilienceService,
+    EnhancedLoggingService,
     // Security components
     SecureValidationPipe,
     SecureRateLimitGuard,
@@ -99,6 +110,10 @@ import jwtConfig from './config/jwt.config';
     RedisCacheService,
     PerformanceMonitorService,
     TransactionService,
+    // Export health and resilience services
+    HealthCheckService,
+    ResilienceService,
+    EnhancedLoggingService,
     // Export security components
     SecureValidationPipe,
     SecureRateLimitGuard,
