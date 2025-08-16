@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Task } from './entities/task.entity';
@@ -19,12 +19,23 @@ export class TasksService {
   ) {}
 
   async create(createTaskDto: CreateTaskDto): Promise<Task> {
-    // Inefficient implementation: creates the task but doesn't use a single transaction
-    // for creating and adding to queue, potential for inconsistent state
+    // Validate and convert dueDate if provided
+    if (createTaskDto.dueDate) {
+      const dueDate = new Date(createTaskDto.dueDate);
+      if (isNaN(dueDate.getTime())) {
+        throw new BadRequestException(
+          'Invalid dueDate format. Please provide a valid date string.',
+        );
+      }
+      // Convert to Date object for the entity
+      createTaskDto.dueDate = dueDate as any;
+    }
+
+    // Create task with proper validation
     const task = this.tasksRepository.create(createTaskDto);
     const savedTask = await this.tasksRepository.save(task);
 
-    // Add to queue without waiting for confirmation or handling errors
+    // Add to queue for background processing
     this.taskQueue.add('task-status-update', {
       taskId: savedTask.id,
       status: savedTask.status,
