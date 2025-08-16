@@ -34,14 +34,14 @@ export class TasksController {
   async findAll(
     @Query('status') status?: string,
     @Query('priority') priority?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.tasksService.findAll({
       status,
       priority,
-      page,
-      limit
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 10
     });
   }
 

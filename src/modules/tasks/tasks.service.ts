@@ -39,11 +39,15 @@ export class TasksService {
       priority,
       userId,
       search,
-      page = 1,
-      limit = 10,
+      page: rawPage = 1,
+      limit: rawLimit = 10,
       sortBy = 'createdAt',
       sortOrder = 'DESC'
     } = filterDto || {};
+
+    // Ensure page and limit are valid numbers
+    const page = Math.max(1, parseInt(String(rawPage), 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(String(rawLimit), 10) || 10));
 
     // Build query builder for efficient database-level filtering
     const queryBuilder = this.tasksRepository
@@ -76,7 +80,7 @@ export class TasksService {
     queryBuilder.orderBy(`task.${sortField}`, sortOrder as 'ASC' | 'DESC');
 
     // Apply pagination
-    const skip = (page - 1) * limit;
+    const skip = Math.max(0, (page - 1) * limit);
     queryBuilder.skip(skip).take(limit);
 
     // Execute query with count
