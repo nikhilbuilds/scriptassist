@@ -302,10 +302,13 @@ TypeError: JwtStrategy requires a secret or key -
 
 ## 10. Improper authorization checks that can be bypassed
 
+## Add Role Gaurds and verify object level access.
+
 
 
 ## End Note - 
 
+## Create a cache mod
 ## There are no domain examples that need transactions, they are only needed when updating different tables or rows and all the operations need to succeed. If one fails the rest must be rolled back
 ## common service to paginate a repositories response.
 ## Create a transaction management utility.

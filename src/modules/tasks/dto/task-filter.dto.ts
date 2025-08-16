@@ -1,11 +1,18 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsDateString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsDateString, IsUUID } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { TaskPriority } from '../enums/task-priority.enum';
 import { TaskStatus } from '../enums/task-status.enum';
 import { PaginationDto } from '@common/dto/pagination.dto';
 
 export class TaskFilterDto extends PaginationDto {
+  @ApiPropertyOptional({
+    description: 'User id of the task owner',
+  })
+  @IsUUID()
+  @IsOptional()
+  userId?: string;
+
   @ApiPropertyOptional({
     enum: TaskStatus,
     description: 'Filter tasks by their status.',

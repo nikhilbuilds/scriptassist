@@ -57,6 +57,10 @@ export class TasksService {
       where: {},
     };
 
+    if (filter.userId) {
+      findOptions.where = { ...findOptions.where, userId: filter.userId };
+    }
+
     if (filter.status) {
       findOptions.where = { ...findOptions.where, status: filter.status };
     }
@@ -109,15 +113,22 @@ export class TasksService {
     };
   }
 
-  async findOne(id: string): Promise<Task> {
+  async findOne(id: string, taskOwnerId: string): Promise<Task> {
     return (await this.tasksRepository.findOne({
-      where: { id },
+      where: { id, userId: taskOwnerId },
       relations: ['user'],
     })) as Task;
   }
 
-  async update(id: string, updateTaskDto: UpdateTaskDto): Promise<{ message: string }> {
-    const updateResult = await this.tasksRepository.update(id, { ...updateTaskDto });
+  async update(
+    id: string,
+    taskOwnerId: string,
+    updateTaskDto: UpdateTaskDto,
+  ): Promise<{ message: string }> {
+    const updateResult = await this.tasksRepository.update(
+      { id, userId: taskOwnerId },
+      { ...updateTaskDto },
+    );
     if ((updateResult.affected ?? 0) > 0) {
       this.taskQueue.add('task-status-update', {
         taskId: id,
@@ -129,7 +140,7 @@ export class TasksService {
     }
   }
 
-  async remove(id: string): Promise<{ message: string }> {
+  async remove(id: string, taskOwnerId: string): Promise<{ message: string }> {
     const deleteResult = await this.tasksRepository.delete(id);
 
     if ((deleteResult.affected ?? 0) === 0) {

@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Task } from '../../tasks/entities/task.entity';
 import { Exclude } from 'class-transformer';
+import { Role } from '../enums/role.enum';
 
 @Entity('users')
 export class User {
@@ -24,7 +25,11 @@ export class User {
   @Exclude({ toPlainOnly: true })
   password: string;
 
-  @Column({ default: 'user' })
+  @Column({
+    type: 'enum',
+    enum: Role,
+    default: Role.USER,
+  })
   role: string;
 
   @OneToMany(() => Task, task => task.user)

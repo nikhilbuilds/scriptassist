@@ -10,6 +10,7 @@ import {
   Query,
   HttpException,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -21,6 +22,10 @@ import { TaskBatchProcessDTO } from './dto/task-batch-process.dto';
 import { TaskFilterDto } from './dto/task-filter.dto';
 import { UuidDTO } from '@common/dto/uuid.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { Roles } from '@common/decorators/roles.decorator';
+import { RolesGuard } from '@common/guards/roles.guard';
+import { Request } from 'express';
+import { User } from '@modules/users/entities/user.entity';
 
 @ApiTags('tasks')
 @Controller('tasks')
@@ -30,6 +35,8 @@ import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
+  @Roles('user')
+  @UseGuards(RolesGuard)
   @Post()
   @ApiOperation({ summary: 'Create a new task' })
   create(@Body() createTaskDto: CreateTaskDto) {
@@ -38,7 +45,8 @@ export class TasksController {
 
   @Get()
   @ApiOperation({ summary: 'Find all tasks with optional filtering' })
-  async findAll(@Query() taskFilterDto: TaskFilterDto) {
+  async findAll(@Req() request: Request, @Query() taskFilterDto: TaskFilterDto) {
+    if ((request.user as User).role === 'user') taskFilterDto.userId = (request.user as User).id;
     const { tasks, metaData } = await this.tasksService.findAll(taskFilterDto);
     return {
       data: tasks,
@@ -46,16 +54,20 @@ export class TasksController {
     };
   }
 
+  @Roles('admin')
+  @UseGuards(RolesGuard)
   @Get('stats')
   @ApiOperation({ summary: 'Get task statistics' })
   async getStats() {
     return this.tasksService.getStats();
   }
 
+  @Roles('user')
+  @UseGuards(RolesGuard)
   @Get(':id')
   @ApiOperation({ summary: 'Find a task by ID' })
-  async findOne(@Param('id') id: string) {
-    const task = await this.tasksService.findOne(id);
+  async findOne(@Req() request: Request, @Param('id') id: string) {
+    const task = await this.tasksService.findOne(id, (request.user as User).id);
 
     if (!task) {
       // Inefficient error handling: Revealing internal details
@@ -65,18 +77,24 @@ export class TasksController {
     return task;
   }
 
+  @Roles('user')
+  @UseGuards(RolesGuard)
   @Patch(':id')
   @ApiOperation({ summary: 'Update a task' })
-  update(@Param() uuidDto: UuidDTO, @Body() updateTaskDto: UpdateTaskDto) {
-    return this.tasksService.update(uuidDto.id, updateTaskDto);
+  update(@Req() request: Request, @Param() uuidDto: UuidDTO, @Body() updateTaskDto: UpdateTaskDto) {
+    return this.tasksService.update(uuidDto.id, (request.user as User).id, updateTaskDto);
   }
 
+  @Roles('user')
+  @UseGuards(RolesGuard)
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a task' })
-  remove(@Param('id') id: string) {
-    return this.tasksService.remove(id);
+  remove(@Req() request: Request, @Param('id') id: string) {
+    return this.tasksService.remove(id, (request.user as User).id);
   }
 
+  @Roles('admin')
+  @UseGuards(RolesGuard)
   @Post('batch')
   @ApiOperation({ summary: 'Batch process multiple tasks' })
   async batchProcess(@Body() operations: TaskBatchProcessDTO) {

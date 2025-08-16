@@ -6,6 +6,7 @@ import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
 import jwtConfig from '@config/jwt.config';
 import { RefreshDto } from './dto/refreshDto';
+import { User } from '@modules/users/entities/user.entity';
 
 @Injectable()
 export class AuthService {
@@ -29,18 +30,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid password');
     }
 
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    };
-
     return {
-      access_token: this.jwtService.sign(payload),
-      refresh_token: this.jwtService.sign(payload, {
-        expiresIn: jwtConfig().refreshExpiresIn,
-        secret: jwtConfig().refreshSecret,
-      }),
+      access_token: this.generateToken(user),
+      refresh_token: this.generateRefreshToken(user),
       user: {
         id: user.id,
         email: user.email,
@@ -75,7 +67,7 @@ export class AuthService {
     try {
       const user = await this.usersService.create(registerDto);
 
-      const token = this.generateToken(user.id);
+      const token = this.generateToken(user);
 
       return {
         user: {
@@ -85,6 +77,7 @@ export class AuthService {
           role: user.role,
         },
         token,
+        refreshToken: this.generateRefreshToken(user),
       };
     } catch (error) {
       if ((error as any).constraint === 'users_email_key') {
@@ -95,9 +88,26 @@ export class AuthService {
     }
   }
 
-  private generateToken(userId: string) {
-    const payload = { sub: userId };
-    return this.jwtService.sign(payload);
+  private generateToken(user: User) {
+    return this.jwtService.sign({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+  }
+
+  private generateRefreshToken(user: User) {
+    return this.jwtService.sign(
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      {
+        expiresIn: jwtConfig().refreshExpiresIn,
+        secret: jwtConfig().refreshSecret,
+      },
+    );
   }
 
   async validateUserRoles(userId: string, requiredRoles: string[]): Promise<boolean> {
