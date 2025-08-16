@@ -271,3 +271,20 @@ Good luck! This challenge is designed to test the skills of experienced engineer
 TypeError: JwtStrategy requires a secret or key - 
 
 ### The fix - Wrong env key . Changed from jwt.secret to JWT_SECRET
+
+# Performance & Scalability Issues
+
+## 4. N+1 Query Problem -
+
+## Addressed the N+1 Query problem with batchProcess in the tasks.cotroller. Solution was to refactor the code in the controller to the task service and use bulk updates and delete operations to improve performace and scalability. Also error handling is consistent and readability has improved.
+
+## 4. Inefficient in-memory filtering and pagination that won't scale -
+
+## Addressed the In Memory filtering and pagination issue
+
+
+
+
+### User.service.ts
+
+### Update Or Remove without first finding the user and handling the exception and returning the appropriate error message. (Helps with race conditions.)

@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { DeleteResult, In, LessThan, Repository, UpdateResult } from 'typeorm';
 import { Task } from './entities/task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -109,5 +109,33 @@ export class TasksService {
         status: TaskStatus.PENDING,
       },
     });
+  }
+
+  async batchProcess(operations: { taskIds: string[]; action: string }): Promise<number> {
+    const { taskIds, action } = operations;
+    let result: UpdateResult | DeleteResult;
+
+    switch (action) {
+      case 'complete':
+        result = await this.tasksRepository.update(
+          { id: In(taskIds) },
+          { status: TaskStatus.COMPLETED },
+        );
+        break;
+      case 'delete':
+        result = await this.tasksRepository.delete({ id: In(taskIds) });
+        break;
+      default:
+        throw new HttpException(`Unknown action: ${action}`, HttpStatus.BAD_REQUEST);
+    }
+
+    if (result.affected === 0) {
+      throw new HttpException(
+        `None of the task ids where found in the database`,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return result.affected ?? 0;
   }
 }
