@@ -5,12 +5,14 @@ export interface PaginationOptions {
   sortOrder?: 'ASC' | 'DESC';
 }
 
+export interface PaginationMetaData {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
+  meta: PaginationMetaData;
 }

@@ -1,12 +1,25 @@
 import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DeleteResult, In, LessThan, Repository, UpdateResult } from 'typeorm';
+import {
+  DeleteResult,
+  FindManyOptions,
+  In,
+  LessThan,
+  LessThanOrEqual,
+  Like,
+  MoreThanOrEqual,
+  Repository,
+  UpdateResult,
+} from 'typeorm';
 import { Task } from './entities/task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { TaskStatus } from './enums/task-status.enum';
+import { TaskFilterDto } from './dto/task-filter.dto';
+import { PaginationDto } from '@common/dto/pagination.dto';
+import { PaginationMetaData } from '../../types/pagination.interface';
 
 @Injectable()
 export class TasksService {
@@ -32,12 +45,65 @@ export class TasksService {
     return savedTask;
   }
 
-  async findAll(): Promise<Task[]> {
-    // Inefficient implementation: retrieves all tasks without pagination
-    // and loads all relations, causing potential performance issues
-    return this.tasksRepository.find({
+  async findAll(filter: TaskFilterDto): Promise<{
+    tasks: Task[];
+    metaData: PaginationMetaData;
+  }> {
+    const findOptions: FindManyOptions<Task> = {
       relations: ['user'],
-    });
+      where: {},
+    };
+
+    if (filter.status) {
+      findOptions.where = { ...findOptions.where, status: filter.status };
+    }
+
+    if (filter.priority) {
+      findOptions.where = { ...findOptions.where, priority: filter.priority };
+    }
+
+    if (filter.search) {
+      findOptions.where = {
+        ...findOptions.where,
+        ...{
+          title: Like(`%${filter.search}%`),
+          description: Like(`%${filter.search}%`),
+        },
+      };
+    }
+
+    if (filter.startDate) {
+      findOptions.where = {
+        ...findOptions.where,
+        dueDate: MoreThanOrEqual(new Date(filter.startDate)),
+      };
+    }
+
+    if (filter.endDate) {
+      findOptions.where = {
+        ...findOptions.where,
+        dueDate: LessThanOrEqual(new Date(filter.endDate)),
+      };
+    }
+
+    findOptions.skip = (filter.page - 1) * filter.limit;
+    findOptions.take = filter.limit;
+
+    if (filter.sortBy) {
+      findOptions.order = { [filter.sortBy]: filter.sortOrder ?? 'ASC' };
+    }
+
+    const dbResponse = await this.tasksRepository.findAndCount(findOptions);
+
+    return {
+      tasks: dbResponse[0],
+      metaData: {
+        total: dbResponse[1],
+        page: filter.page,
+        limit: filter.limit,
+        totalPages: Math.ceil(dbResponse[1] / filter.limit),
+      },
+    };
   }
 
   async findOne(id: string): Promise<Task> {

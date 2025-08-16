@@ -9,12 +9,14 @@ import {
   UseGuards,
   ClassSerializerInterceptor,
   UseInterceptors,
+  Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { PaginationDto } from '@common/dto/pagination.dto';
 
 @ApiTags('users')
 @Controller('users')
@@ -30,8 +32,13 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get()
-  findAll() {
-    return this.usersService.findAll();
+  @ApiOperation({ summary: 'Get users' })
+  async findAll(@Query() paginationDto: PaginationDto) {
+    const { users, metaData } = await this.usersService.findAll(paginationDto);
+    return {
+      data: users,
+      meta: metaData,
+    };
   }
 
   @UseGuards(JwtAuthGuard)

@@ -278,11 +278,13 @@ TypeError: JwtStrategy requires a secret or key -
 
 ## Addressed the N+1 Query problem with batchProcess in the tasks.cotroller. Solution was to refactor the code in the controller to the task service and use bulk updates and delete operations to improve performace and scalability. Also error handling is consistent and readability has improved.
 
-## 4. Inefficient in-memory filtering and pagination that won't scale -
+## 5. Inefficient in-memory filtering and pagination that won't scale -
 
-## Addressed the In Memory filtering and pagination issue
+## Addressed the In Memory filtering and pagination issue, updated both the tasks and the users controller, to have effiecient db side pagination and filtering. Also addewd DTO for better code quality.
 
+## 6. Collecting Stats, ineffiecient Implementation -
 
+## 
 
 
 ### User.service.ts

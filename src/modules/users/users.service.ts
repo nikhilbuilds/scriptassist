@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindManyOptions, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
+import { PaginationDto } from '@common/dto/pagination.dto';
+import { PaginationMetaData } from '../../types/pagination.interface';
 
 @Injectable()
 export class UsersService {
@@ -22,8 +24,32 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  findAll(): Promise<User[]> {
-    return this.usersRepository.find();
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<{ users: User[]; metaData: PaginationMetaData }> {
+    const findOptions: FindManyOptions<User> = {
+      skip: (paginationDto.page - 1) * paginationDto.limit,
+      take: paginationDto.limit,
+    };
+
+    if (paginationDto.sortBy) {
+      findOptions.order = { [paginationDto.sortBy]: paginationDto.sortOrder ?? 'ASC' };
+    }
+
+    const dbResponse = await this.usersRepository.findAndCount({
+      skip: (paginationDto.page - 1) * paginationDto.limit,
+      take: paginationDto.limit,
+    });
+
+    return {
+      users: dbResponse[0],
+      metaData: {
+        total: dbResponse[1],
+        page: paginationDto.page,
+        limit: paginationDto.limit,
+        totalPages: Math.ceil(dbResponse[1] / paginationDto.limit),
+      },
+    };
   }
 
   async findOne(id: string): Promise<User> {
