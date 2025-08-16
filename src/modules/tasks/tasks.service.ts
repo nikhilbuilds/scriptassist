@@ -31,18 +31,21 @@ export class TasksService {
   ) {}
 
   async create(createTaskDto: CreateTaskDto): Promise<Task> {
-    // Inefficient implementation: creates the task but doesn't use a single transaction
-    // for creating and adding to queue, potential for inconsistent state
-    const task = this.tasksRepository.create(createTaskDto);
-    const savedTask = await this.tasksRepository.save(task);
+    try {
+      const savedTask = await this.tasksRepository.save(this.tasksRepository.create(createTaskDto));
 
-    // Add to queue without waiting for confirmation or handling errors
-    this.taskQueue.add('task-status-update', {
-      taskId: savedTask.id,
-      status: savedTask.status,
-    });
+      if ((savedTask.user as unknown as string) === createTaskDto.userId) {
+        this.taskQueue.add('task-status-update', {
+          taskId: savedTask.id,
+          status: savedTask.status,
+        });
+      }
 
-    return savedTask;
+      return savedTask;
+    } catch (error) {
+      console.error('Error creating task:', error);
+      throw new HttpException('Error creating task', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   async findAll(filter: TaskFilterDto): Promise<{
@@ -107,50 +110,33 @@ export class TasksService {
   }
 
   async findOne(id: string): Promise<Task> {
-    // Inefficient implementation: two separate database calls
-    const count = await this.tasksRepository.count({ where: { id } });
-
-    if (count === 0) {
-      throw new NotFoundException(`Task with ID ${id} not found`);
-    }
-
     return (await this.tasksRepository.findOne({
       where: { id },
       relations: ['user'],
     })) as Task;
   }
 
-  async update(id: string, updateTaskDto: UpdateTaskDto): Promise<Task> {
-    // Inefficient implementation: multiple database calls
-    // and no transaction handling
-    const task = await this.findOne(id);
-
-    const originalStatus = task.status;
-
-    // Directly update each field individually
-    if (updateTaskDto.title) task.title = updateTaskDto.title;
-    if (updateTaskDto.description) task.description = updateTaskDto.description;
-    if (updateTaskDto.status) task.status = updateTaskDto.status;
-    if (updateTaskDto.priority) task.priority = updateTaskDto.priority;
-    if (updateTaskDto.dueDate) task.dueDate = updateTaskDto.dueDate;
-
-    const updatedTask = await this.tasksRepository.save(task);
-
-    // Add to queue if status changed, but without proper error handling
-    if (originalStatus !== updatedTask.status) {
+  async update(id: string, updateTaskDto: UpdateTaskDto): Promise<{ message: string }> {
+    const updateResult = await this.tasksRepository.update(id, { ...updateTaskDto });
+    if ((updateResult.affected ?? 0) > 0) {
       this.taskQueue.add('task-status-update', {
-        taskId: updatedTask.id,
-        status: updatedTask.status,
+        taskId: id,
+        status: updateTaskDto.status,
       });
+      return { message: 'Task updated successfully' };
+    } else {
+      throw new NotFoundException(`Task not found`);
     }
-
-    return updatedTask;
   }
 
-  async remove(id: string): Promise<void> {
-    // Inefficient implementation: two separate database calls
-    const task = await this.findOne(id);
-    await this.tasksRepository.remove(task);
+  async remove(id: string): Promise<{ message: string }> {
+    const deleteResult = await this.tasksRepository.delete(id);
+
+    if ((deleteResult.affected ?? 0) === 0) {
+      throw new NotFoundException(`Task not found`);
+    }
+
+    return { message: 'Task deleted successfully' };
   }
 
   async findByStatus(status: TaskStatus): Promise<Task[]> {
@@ -159,11 +145,8 @@ export class TasksService {
     return this.tasksRepository.query(query, [status]);
   }
 
-  async updateStatus(id: string, status: string): Promise<Task> {
-    // This method will be called by the task processor
-    const task = await this.findOne(id);
-    task.status = status as TaskStatus;
-    return this.tasksRepository.save(task);
+  async updateStatus(id: string, status: TaskStatus): Promise<Task> {
+    return this.tasksRepository.save({ id, status });
   }
 
   async findOverdueTasks(): Promise<Task[]> {

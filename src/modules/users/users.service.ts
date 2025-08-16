@@ -55,6 +55,7 @@ export class UsersService {
   async findOne(id: string): Promise<User> {
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
+      // Ineffiecient error handling, should not expose id.
       throw new NotFoundException(`User with ID ${id} not found`);
     }
     return user;
@@ -64,19 +65,25 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { email } });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    const user = await this.findOne(id);
-
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<{ message: string }> {
     if (updateUserDto.password) {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
     }
-
-    this.usersRepository.merge(user, updateUserDto);
-    return this.usersRepository.save(user);
+    const updateResult = await this.usersRepository.update(id, { ...updateUserDto });
+    if ((updateResult.affected ?? 0) > 0) {
+      return { message: 'User updated successfully' };
+    } else {
+      throw new NotFoundException(`User not found`);
+    }
   }
 
-  async remove(id: string): Promise<void> {
-    const user = await this.findOne(id);
-    await this.usersRepository.remove(user);
+  async remove(id: string): Promise<{ message: string }> {
+    const deleteResult = await this.usersRepository.delete(id);
+
+    if ((deleteResult.affected ?? 0) === 0) {
+      throw new NotFoundException(`User not found`);
+    }
+
+    return { message: 'User deleted successfully' };
   }
 }

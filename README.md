@@ -288,7 +288,17 @@ TypeError: JwtStrategy requires a secret or key -
 
 ## 7. Excessive database roundtrips in batch operations -
 
-## 
+## Tradeoff, The number of repeated db calls are reduced but for update and delete it does not return the entity in the response.
+
+## 8. Poorly optimized data access patterns -
+
+## Tradeoff, The number of repeated db calls are reduced but for update and delete it does not return the entity in the response.
 
 
-### User.service.ts
+
+
+
+
+## End Note - 
+
+## There are no domain examples that need transactions, they are only needed when updating different tables or rows and all the operations need to succeed. If one fails the rest must be rolled back.

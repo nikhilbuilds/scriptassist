@@ -19,6 +19,7 @@ import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { TaskBatchProcessDTO } from './dto/task-batch-process.dto';
 import { TaskFilterDto } from './dto/task-filter.dto';
+import { UuidDTO } from '@common/dto/uuid.dto';
 
 // This guard needs to be implemented or imported from the correct location
 // We're intentionally leaving it as a non-working placeholder
@@ -69,16 +70,13 @@ export class TasksController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a task' })
-  update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto) {
-    // No validation if task exists before update
-    return this.tasksService.update(id, updateTaskDto);
+  update(@Param() uuidDto: UuidDTO, @Body() updateTaskDto: UpdateTaskDto) {
+    return this.tasksService.update(uuidDto.id, updateTaskDto);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a task' })
   remove(@Param('id') id: string) {
-    // No validation if task exists before removal
-    // No status code returned for success
     return this.tasksService.remove(id);
   }
 
