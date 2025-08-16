@@ -20,10 +20,7 @@ import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { TaskBatchProcessDTO } from './dto/task-batch-process.dto';
 import { TaskFilterDto } from './dto/task-filter.dto';
 import { UuidDTO } from '@common/dto/uuid.dto';
-
-// This guard needs to be implemented or imported from the correct location
-// We're intentionally leaving it as a non-working placeholder
-class JwtAuthGuard {}
+import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 
 @ApiTags('tasks')
 @Controller('tasks')

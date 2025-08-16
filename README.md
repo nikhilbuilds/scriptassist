@@ -292,13 +292,21 @@ TypeError: JwtStrategy requires a secret or key -
 
 ## 8. Poorly optimized data access patterns -
 
-## Tradeoff, The number of repeated db calls are reduced but for update and delete it does not return the entity in the response.
+## Services in the tasks service were optimized and paginated as well. Even if this is used in queues the data can be chuncked and sent for processing in the queues.
 
+# Security Vulnerabilities
 
+## 9. Inadequate authentication mechanism with several vulnerabilities
 
+## Implement Refresh Token and update JWT Guards. - Reduce jwt token verification to 12 hours and add refresh token which has a 7 day expiration.
+
+## 10. Improper authorization checks that can be bypassed
 
 
 
 ## End Note - 
 
-## There are no domain examples that need transactions, they are only needed when updating different tables or rows and all the operations need to succeed. If one fails the rest must be rolled back.
+## There are no domain examples that need transactions, they are only needed when updating different tables or rows and all the operations need to succeed. If one fails the rest must be rolled back
+## common service to paginate a repositories response.
+## Create a transaction management utility.
+## Improved authentication - Create a session table to invalidate old access tokens on refresh.

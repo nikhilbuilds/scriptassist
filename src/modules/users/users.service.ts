@@ -52,13 +52,8 @@ export class UsersService {
     };
   }
 
-  async findOne(id: string): Promise<User> {
-    const user = await this.usersRepository.findOne({ where: { id } });
-    if (!user) {
-      // Ineffiecient error handling, should not expose id.
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-    return user;
+  async findOne(id: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { id } });
   }
 
   async findByEmail(email: string): Promise<User | null> {
