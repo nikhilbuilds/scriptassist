@@ -319,6 +319,10 @@ TypeError: JwtStrategy requires a secret or key -
 
 ## 14. Missing retry mechanisms for distributed operations, improved error handling for scheduled tasks and queues.
 
+## Update bull mq with reties and added batching and improved error handling.
+
+## 15. Add appropriate indexing strategies
+
 
 
 

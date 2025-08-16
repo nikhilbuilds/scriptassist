@@ -35,10 +35,20 @@ export class TasksService {
       const savedTask = await this.tasksRepository.save(this.tasksRepository.create(createTaskDto));
 
       if ((savedTask.user as unknown as string) === createTaskDto.userId) {
-        this.taskQueue.add('task-status-update', {
-          taskId: savedTask.id,
-          status: savedTask.status,
-        });
+        this.taskQueue.add(
+          'task-status-update',
+          {
+            taskId: savedTask.id,
+            status: savedTask.status,
+          },
+          {
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 1000,
+            },
+          },
+        );
       }
 
       return savedTask;
@@ -129,11 +139,21 @@ export class TasksService {
       { id, userId: taskOwnerId },
       { ...updateTaskDto },
     );
-    if ((updateResult.affected ?? 0) > 0) {
-      this.taskQueue.add('task-status-update', {
-        taskId: id,
-        status: updateTaskDto.status,
-      });
+    if ((updateResult.affected ?? 0) > 0 && updateTaskDto.status) {
+      this.taskQueue.add(
+        'task-status-update',
+        {
+          taskId: id,
+          status: updateTaskDto.status,
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 1000,
+          },
+        },
+      );
       return { message: 'Task updated successfully' };
     } else {
       throw new NotFoundException(`Task not found`);
@@ -141,7 +161,7 @@ export class TasksService {
   }
 
   async remove(id: string, taskOwnerId: string): Promise<{ message: string }> {
-    const deleteResult = await this.tasksRepository.delete(id);
+    const deleteResult = await this.tasksRepository.delete({ id, userId: taskOwnerId });
 
     if ((deleteResult.affected ?? 0) === 0) {
       throw new NotFoundException(`Task not found`);
@@ -172,8 +192,14 @@ export class TasksService {
     };
   }
 
-  async updateStatus(id: string, status: TaskStatus): Promise<Task> {
-    return this.tasksRepository.save({ id, status });
+  async updateStatus(id: string, status: TaskStatus): Promise<{ message: string }> {
+    const updateResult = await this.tasksRepository.update(id, { status });
+
+    if (updateResult.affected === 0) {
+      return { message: 'Task not found' };
+    } else {
+      return { message: 'Task status updated successfully' };
+    }
   }
 
   async findOverdueTasks(
