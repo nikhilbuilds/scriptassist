@@ -5,7 +5,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
+import { RolesGuard } from './guards/roles.guard';
 import { UsersModule } from '../users/users.module';
+import { CacheService } from '../../common/services/cache.service';
 
 @Module({
   imports: [
@@ -18,12 +21,14 @@ import { UsersModule } from '../users/users.module';
         secret: configService.get('jwt.secret'),
         signOptions: {
           expiresIn: configService.get('jwt.expiresIn'),
+          issuer: 'taskflow-api',
+          audience: 'taskflow-users',
         },
       }),
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, RefreshTokenStrategy, RolesGuard, CacheService],
+  exports: [AuthService, RolesGuard],
 })
 export class AuthModule {} 
