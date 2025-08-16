@@ -4,12 +4,16 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CqrsModule } from '@nestjs/cqrs';
 import { UsersModule } from './modules/users/users.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TaskProcessorModule } from './queues/task-processor/task-processor.module';
 import { ScheduledTasksModule } from './queues/scheduled-tasks/scheduled-tasks.module';
-import { CacheService } from './common/services/cache.service';
+import { RedisCacheService } from './common/services/redis-cache.service';
+import { PerformanceMonitorService } from './common/services/performance-monitor.service';
+import { PerformanceController } from './common/controllers/performance.controller';
+import { TransactionService } from './common/services/transaction.service';
 import jwtConfig from './config/jwt.config';
 
 @Module({
@@ -39,6 +43,9 @@ import jwtConfig from './config/jwt.config';
     
     // Scheduling
     ScheduleModule.forRoot(),
+    
+    // CQRS
+    CqrsModule,
     
     // Queue
     BullModule.forRootAsync({
@@ -73,15 +80,20 @@ import jwtConfig from './config/jwt.config';
     TaskProcessorModule,
     ScheduledTasksModule,
   ],
+  controllers: [
+    PerformanceController,
+  ],
   providers: [
-    // Inefficient: Global cache service with no configuration options
-    // This creates a single in-memory cache instance shared across all modules
-    CacheService
+    // Redis-based cache service for better performance and scalability
+    RedisCacheService,
+    PerformanceMonitorService,
+    TransactionService,
   ],
   exports: [
-    // Exporting the cache service makes it available to other modules
-    // but creates tight coupling
-    CacheService
+    // Exporting the Redis cache service for use across modules
+    RedisCacheService,
+    PerformanceMonitorService,
+    TransactionService,
   ]
 })
 export class AppModule {} 

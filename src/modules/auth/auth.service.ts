@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { CacheService } from '../../common/services/cache.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { 
   LoginResponse, 
   RegisterResponse, 
@@ -23,7 +23,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-    private readonly cacheService: CacheService,
+    private readonly cacheService: RedisCacheService,
   ) {}
 
   async login(loginDto: LoginDto): Promise<LoginResponse> {
@@ -62,7 +62,7 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
     await this.cacheService.set(
       `refresh_token:${user.id}`,
       refreshTokenHash,
-      7 * 24 * 60 * 60
+      { ttl: 7 * 24 * 60 * 60 }
     );
 
     return {
@@ -92,7 +92,7 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
     await this.cacheService.set(
       `refresh_token:${user.id}`,
       refreshTokenHash,
-      7 * 24 * 60 * 60
+      { ttl: 7 * 24 * 60 * 60 }
     );
 
     return {
@@ -128,7 +128,7 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
       await this.cacheService.set(
         `refresh_token:${user.id}`,
         newRefreshTokenHash,
-        7 * 24 * 60 * 60
+        { ttl: 7 * 24 * 60 * 60 }
       );
 
       return {
@@ -155,7 +155,7 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
       user = JSON.parse(userStr);
     } else {
       user = await this.usersService.findOne(userId);
-      if (user) await this.cacheService.set(cacheKey, JSON.stringify(user), 300);
+      if (user) await this.cacheService.set(cacheKey, JSON.stringify(user), { ttl: 300 });
     }
 
     return user;
@@ -201,7 +201,7 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
     await this.cacheService.set(
       lockoutKey,
       JSON.stringify({ attempts, lockedUntil }),
-      this.LOCKOUT_DURATION / 1000
+      { ttl: this.LOCKOUT_DURATION / 1000 }
     );
   }
 

@@ -8,7 +8,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
 import { RolesGuard } from './guards/roles.guard';
 import { UsersModule } from '../users/users.module';
-import { CacheService } from '../../common/services/cache.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 
 @Module({
   imports: [
@@ -28,7 +28,7 @@ import { CacheService } from '../../common/services/cache.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, RefreshTokenStrategy, RolesGuard, CacheService],
+  providers: [AuthService, JwtStrategy, RefreshTokenStrategy, RolesGuard, RedisCacheService],
   exports: [AuthService, RolesGuard],
 })
 export class AuthModule {} 
