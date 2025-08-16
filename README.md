@@ -224,14 +224,16 @@ Your solution will be evaluated on:
 
 ## Submission Guidelines
 
-1. Create a new branch for your implementation
+1. Fork this repository to your own GitHub account
 2. Make regular, meaningful commits that tell a story
-3. Create a pull request with a comprehensive description containing:
+3. Create a comprehensive README.md in your forked repository containing:
    - Analysis of the core problems you identified
    - Overview of your architectural approach
    - Performance and security improvements made
    - Key technical decisions and their rationale
    - Any tradeoffs you made and why
+4. Ensure your repository is public so we can review your work
+5. Submit the link to your public GitHub repository
 
 ## API Endpoints
 
@@ -249,4 +251,4 @@ The API should expose the following endpoints:
 - `DELETE /tasks/:id` - Delete a task
 - `POST /tasks/batch` - Batch operations on tasks
 
-Good luck! This challenge is designed to test the skills of experienced engineers in creating scalable, maintainable, and secure systems. 
+Good luck! This challenge is designed to test the skills of experienced engineers in creating scalable, maintainable, and secure systems.
