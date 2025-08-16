@@ -14,6 +14,8 @@ import { RedisCacheService } from './common/services/redis-cache.service';
 import { PerformanceMonitorService } from './common/services/performance-monitor.service';
 import { PerformanceController } from './common/controllers/performance.controller';
 import { TransactionService } from './common/services/transaction.service';
+import { SecureValidationPipe } from './common/pipes/secure-validation.pipe';
+import { SecureRateLimitGuard } from './common/guards/secure-rate-limit.guard';
 import jwtConfig from './config/jwt.config';
 
 @Module({
@@ -88,12 +90,18 @@ import jwtConfig from './config/jwt.config';
     RedisCacheService,
     PerformanceMonitorService,
     TransactionService,
+    // Security components
+    SecureValidationPipe,
+    SecureRateLimitGuard,
   ],
   exports: [
     // Exporting the Redis cache service for use across modules
     RedisCacheService,
     PerformanceMonitorService,
     TransactionService,
+    // Export security components
+    SecureValidationPipe,
+    SecureRateLimitGuard,
   ]
 })
 export class AppModule {} 

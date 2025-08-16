@@ -58,9 +58,15 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
 
     const { accessToken, refreshToken } = await this.generateTokens(user);
 
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+    // Store refresh token hash for rotation
+    const refreshTokenHash = this.hashToken(refreshToken);
     await this.cacheService.set(
       `refresh_token:${user.id}`,
+      'valid',
+      { ttl: 7 * 24 * 60 * 60 }
+    );
+    await this.cacheService.set(
+      `refresh_token_hash:${user.id}`,
       refreshTokenHash,
       { ttl: 7 * 24 * 60 * 60 }
     );
@@ -88,9 +94,15 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
 
     const { accessToken, refreshToken } = await this.generateTokens(user);
 
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+    // Store refresh token hash for rotation
+    const refreshTokenHash = this.hashToken(refreshToken);
     await this.cacheService.set(
       `refresh_token:${user.id}`,
+      'valid',
+      { ttl: 7 * 24 * 60 * 60 }
+    );
+    await this.cacheService.set(
+      `refresh_token_hash:${user.id}`,
       refreshTokenHash,
       { ttl: 7 * 24 * 60 * 60 }
     );
@@ -117,16 +129,40 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
       const user: User | null = await this.usersService.findOne(payload.sub);
       if (!user) throw new UnauthorizedException('Invalid refresh token');
 
-      const storedTokenHash = await this.cacheService.get(`refresh_token:${user.id}`);
-      if (typeof storedTokenHash !== 'string' || !storedTokenHash) throw new UnauthorizedException('Refresh token has been revoked');
+      // Check if refresh token is in cache (not revoked)
+      const isTokenValid = await this.cacheService.get(`refresh_token:${user.id}`);
+      if (!isTokenValid) throw new UnauthorizedException('Refresh token has been revoked');
 
-      const isValid = await bcrypt.compare(refreshToken, storedTokenHash);
-      if (!isValid) throw new UnauthorizedException('Invalid refresh token');
+      // Verify the token hash matches
+      const tokenHash = await this.cacheService.get(`refresh_token_hash:${user.id}`);
+      if (!tokenHash || tokenHash !== this.hashToken(refreshToken)) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
 
+      // Check if token is expired
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        // Remove expired token from cache
+        await this.cacheService.delete(`refresh_token:${user.id}`);
+        await this.cacheService.delete(`refresh_token_hash:${user.id}`);
+        throw new UnauthorizedException('Refresh token has expired');
+      }
+
+      // Implement token rotation - invalidate current refresh token
+      await this.cacheService.delete(`refresh_token:${user.id}`);
+      await this.cacheService.delete(`refresh_token_hash:${user.id}`);
+
+      // Generate new tokens
       const { accessToken, refreshToken: newRefreshToken } = await this.generateTokens(user);
-      const newRefreshTokenHash = await bcrypt.hash(newRefreshToken, 10);
+      
+      // Store new refresh token hash
+      const newRefreshTokenHash = this.hashToken(newRefreshToken);
       await this.cacheService.set(
         `refresh_token:${user.id}`,
+        'valid',
+        { ttl: 7 * 24 * 60 * 60 }
+      );
+      await this.cacheService.set(
+        `refresh_token_hash:${user.id}`,
         newRefreshTokenHash,
         { ttl: 7 * 24 * 60 * 60 }
       );
@@ -143,6 +179,7 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
 
   async logout(userId: string): Promise<LogoutResponse> {
     await this.cacheService.delete(`refresh_token:${userId}`);
+    await this.cacheService.delete(`refresh_token_hash:${userId}`);
     return { message: 'Successfully logged out' };
   }
 
@@ -183,6 +220,11 @@ const lockoutDataStr = await this.cacheService.get(lockoutKey);
     ]);
 
     return { accessToken, refreshToken };
+  }
+
+  private hashToken(token: string): string {
+    const crypto = require('crypto');
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 
   private async recordFailedAttempt(email: string) {

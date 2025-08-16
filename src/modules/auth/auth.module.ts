@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
 import { RolesGuard } from './guards/roles.guard';
+import { EnhancedAuthGuard } from './guards/enhanced-auth.guard';
 import { UsersModule } from '../users/users.module';
 import { RedisCacheService } from '../../common/services/redis-cache.service';
 
@@ -28,7 +29,14 @@ import { RedisCacheService } from '../../common/services/redis-cache.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, RefreshTokenStrategy, RolesGuard, RedisCacheService],
-  exports: [AuthService, RolesGuard],
+  providers: [
+    AuthService, 
+    JwtStrategy, 
+    RefreshTokenStrategy, 
+    RolesGuard, 
+    EnhancedAuthGuard,
+    RedisCacheService
+  ],
+  exports: [AuthService, RolesGuard, EnhancedAuthGuard],
 })
 export class AuthModule {} 
