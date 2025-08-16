@@ -18,8 +18,8 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { TaskStatus } from './enums/task-status.enum';
 import { TaskFilterDto } from './dto/task-filter.dto';
-import { PaginationDto } from '@common/dto/pagination.dto';
 import { PaginationMetaData } from '../../types/pagination.interface';
+import { TaskPriority } from './enums/task-priority.enum';
 
 @Injectable()
 export class TasksService {
@@ -203,5 +203,36 @@ export class TasksService {
     }
 
     return result.affected ?? 0;
+  }
+
+  async getStats(): Promise<{
+    total: number;
+    completed: number;
+    inProgress: number;
+    pending: number;
+    highPriority: number;
+  }> {
+    const result = await this.tasksRepository
+      .createQueryBuilder('task')
+      .select('COUNT(*)', 'total')
+      .addSelect('SUM(CASE WHEN task.status = :completedStatus THEN 1 ELSE 0 END)', 'completed')
+      .addSelect('SUM(CASE WHEN task.status = :inProgressStatus THEN 1 ELSE 0 END)', 'inProgress')
+      .addSelect('SUM(CASE WHEN task.status = :pendingStatus THEN 1 ELSE 0 END)', 'pending')
+      .addSelect('SUM(CASE WHEN task.priority = :highPriority THEN 1 ELSE 0 END)', 'highPriority')
+      .setParameters({
+        completedStatus: TaskStatus.COMPLETED,
+        inProgressStatus: TaskStatus.IN_PROGRESS,
+        pendingStatus: TaskStatus.PENDING,
+        highPriority: TaskPriority.HIGH,
+      })
+      .getRawOne();
+
+    return {
+      total: parseInt(result.total, 10),
+      completed: parseInt(result.completed, 10),
+      inProgress: parseInt(result.inProgress, 10),
+      pending: parseInt(result.pending, 10),
+      highPriority: parseInt(result.highPriority, 10),
+    };
   }
 }

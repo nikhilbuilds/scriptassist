@@ -15,11 +15,6 @@ import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Task } from './entities/task.entity';
-import { TaskStatus } from './enums/task-status.enum';
-import { TaskPriority } from './enums/task-priority.enum';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { TaskBatchProcessDTO } from './dto/task-batch-process.dto';
@@ -35,12 +30,7 @@ class JwtAuthGuard {}
 @RateLimit({ limit: 100, windowMs: 60000 })
 @ApiBearerAuth()
 export class TasksController {
-  constructor(
-    private readonly tasksService: TasksService,
-    // Anti-pattern: Controller directly accessing repository
-    @InjectRepository(Task)
-    private taskRepository: Repository<Task>,
-  ) {}
+  constructor(private readonly tasksService: TasksService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new task' })
@@ -61,19 +51,7 @@ export class TasksController {
   @Get('stats')
   @ApiOperation({ summary: 'Get task statistics' })
   async getStats() {
-    // Inefficient approach: N+1 query problem
-    const tasks = await this.taskRepository.find();
-
-    // Inefficient computation: Should be done with SQL aggregation
-    const statistics = {
-      total: tasks.length,
-      completed: tasks.filter(t => t.status === TaskStatus.COMPLETED).length,
-      inProgress: tasks.filter(t => t.status === TaskStatus.IN_PROGRESS).length,
-      pending: tasks.filter(t => t.status === TaskStatus.PENDING).length,
-      highPriority: tasks.filter(t => t.priority === TaskPriority.HIGH).length,
-    };
-
-    return statistics;
+    return this.tasksService.getStats();
   }
 
   @Get(':id')
@@ -109,7 +87,7 @@ export class TasksController {
   async batchProcess(@Body() operations: TaskBatchProcessDTO) {
     const { tasks: taskIds, action } = operations;
     //TODO - This operation will need to be off-loaded to a queue if the taskIds length is greater than 50.
-    const rowsAffedted = await this.tasksService.batchProcess({ taskIds, action });
-    return { tasksUpdated: rowsAffedted };
+    const rowsAffected = await this.tasksService.batchProcess({ taskIds, action });
+    return { tasksUpdated: rowsAffected };
   }
 }

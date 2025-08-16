@@ -284,9 +284,11 @@ TypeError: JwtStrategy requires a secret or key -
 
 ## 6. Collecting Stats, ineffiecient Implementation -
 
+## Convert inefficient db call and in memory count to an aggregate with type orm sql builder. 
+
+## 7. Excessive database roundtrips in batch operations -
+
 ## 
 
 
 ### User.service.ts
-
-### Update Or Remove without first finding the user and handling the exception and returning the appropriate error message. (Helps with race conditions.)
