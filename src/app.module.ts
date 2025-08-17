@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
@@ -10,6 +10,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TaskProcessorModule } from './queues/task-processor/task-processor.module';
 import { ScheduledTasksModule } from './queues/scheduled-tasks/scheduled-tasks.module';
 import { CacheService } from './common/services/cache.service';
+import { SecurityMiddleware } from './common/middleware/security.middleware';
 
 @Module({
   imports: [
@@ -50,14 +51,30 @@ import { CacheService } from './common/services/cache.service';
       }),
     }),
     
-    // Rate limiting
+    // Enhanced Rate limiting with multiple strategies
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ([
         {
+          name: 'global',
           ttl: 60,
-          limit: 10,
+          limit: 100, // Global limit per minute
+        },
+        {
+          name: 'auth',
+          ttl: 60,
+          limit: 5, // Stricter limit for auth endpoints
+        },
+        {
+          name: 'api',
+          ttl: 60,
+          limit: 30, // Standard API limit
+        },
+        {
+          name: 'strict',
+          ttl: 60,
+          limit: 10, // Strict limit for sensitive operations
         },
       ]),
     }),
@@ -82,4 +99,10 @@ import { CacheService } from './common/services/cache.service';
     CacheService
   ]
 })
-export class AppModule {} 
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(SecurityMiddleware)
+      .forRoutes('*'); // Apply to all routes
+  }
+} 
