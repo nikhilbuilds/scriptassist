@@ -11,6 +11,8 @@ import { TaskProcessorModule } from './queues/task-processor/task-processor.modu
 import { ScheduledTasksModule } from './queues/scheduled-tasks/scheduled-tasks.module';
 import { addTransactionalDataSource } from 'typeorm-transactional';
 import { DataSource } from 'typeorm';
+import { HealthCheck } from '@nestjs/terminus';
+import { HealthModule } from '@modules/health/health.module';
 
 @Module({
   imports: [
@@ -74,6 +76,7 @@ import { DataSource } from 'typeorm';
     UsersModule,
     TasksModule,
     AuthModule,
+    HealthModule,
 
     // Queue processing modules
     TaskProcessorModule,

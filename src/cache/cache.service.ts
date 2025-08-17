@@ -1,11 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { HealthIndicatorResult } from '@nestjs/terminus';
 import Redis from 'ioredis';
 
 @Injectable()
 export class CacheService {
   private readonly client: Redis;
   private readonly keyPrefix = 'script-assist-cache:';
+  private readonly logger = new Logger(CacheService.name);
 
   constructor(configService: ConfigService) {
     this.client = new Redis({
@@ -100,5 +102,15 @@ export class CacheService {
     const prefixedKey = this.keyPrefix + key;
     const exists = await this.client.exists(prefixedKey);
     return exists > 0;
+  }
+
+  async pingCheck(): Promise<HealthIndicatorResult<'cache'>> {
+    try {
+      await this.client.ping();
+      return { cache: { status: 'up' } };
+    } catch (error) {
+      this.logger.error('Cache ping failed', error);
+      return { cache: { status: 'down' } };
+    }
   }
 }

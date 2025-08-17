@@ -324,9 +324,15 @@ Good luck! This challenge is designed to test the skills of experienced engineer
 
 ### Indexes were added to various fileds in the task entity.
 
-## 16 Add Transaction Management capability
+## 16. Add Transaction Management capability
 
-### typeorm-transactional - implemented with decorator
+### typeorm-transactional - implemented with decorator to allow any service to run inside of a transaction.
+
+## 17. Health Checks, Implement one observability pattern
+
+### Created health checks to test the db, redis, api server and queues. These checks along with the logger interceptor improve system observability.
+
+
 
 
 
