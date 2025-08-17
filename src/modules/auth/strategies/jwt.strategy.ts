@@ -14,10 +14,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: configService.get('jwt.secret'),
+      issuer: 'taskflow-api',
+      audience: 'taskflow-users',
     });
   }
 
   async validate(payload: any) {
+    // Validate token type
+    if (payload.type !== 'access') {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
     const user = await this.usersService.findOne(payload.sub);
     
     if (!user) {

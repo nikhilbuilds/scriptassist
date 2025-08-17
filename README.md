@@ -1,254 +1,1823 @@
-# TaskFlow API - Senior Backend Engineer Coding Challenge
+## Auth Module Updates
 
-## Introduction
+The **Auth module** has been enhanced with the following improvements:
 
-Welcome to the TaskFlow API coding challenge! This project is designed to evaluate the skills of experienced backend engineers in identifying and solving complex architectural problems using our technology stack.
+- **Refresh Token Support**: Added functionality for refresh tokens to improve authentication flow.
+- **Enhanced Type Safety**: Introduced additional DTOs and implemented stricter type checking throughout the module.
+- **Improved Error Handling**: Errors are now handled with descriptive messages and standardized codes, enabling easier debugging and better developer experience.
 
-The TaskFlow API is a task management system with significant scalability, performance, and security challenges that need to be addressed. The codebase contains intentional anti-patterns and inefficiencies that require thoughtful refactoring and architectural improvements.
+## Performance Issues Resolved
 
-## Tech Stack
+# Performance Optimization Implementation
 
-- **Language**: TypeScript
-- **Framework**: NestJS
-- **ORM**: TypeORM with PostgreSQL
-- **Queue System**: BullMQ with Redis
-- **API Style**: REST with JSON
-- **Package Manager**: Bun
-- **Testing**: Bun test
+This document outlines the comprehensive performance optimizations implemented in the NestJS application.
 
-## Getting Started
+## 🚀 Overview
 
-### Prerequisites
+The performance optimization focuses on four main areas:
 
-- Node.js (v16+)
-- Bun (latest version)
-- PostgreSQL
-- Redis
+1. **Database Query Optimization**
+2. **Caching Strategy**
+3. **Batch Operations**
+4. **Performance Monitoring**
 
-### Setup Instructions
+## 📊 Database Optimizations
 
-1. Clone this repository
-2. Install dependencies:
-   ```bash
-   bun install
-   ```
-3. Configure environment variables by copying `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   # Update the .env file with your database and Redis connection details
-   ```
-4. Database Setup:
-   
-   Ensure your PostgreSQL database is running, then create a database:
-   ```bash
-   # Using psql
-   psql -U postgres
-   CREATE DATABASE taskflow;
-   \q
-   
-   # Or using createdb
-   createdb -U postgres taskflow
-   ```
-   
-   Build the TypeScript files to ensure the migrations can be run:
-   ```bash
-   bun run build
-   ```
+### 1. Database Indexes
 
-5. Run database migrations:
-   ```bash
-   # Option 1: Standard migration (if "No migrations are pending" but tables aren't created)
-   bun run migration:run
-   
-   # Option 2: Force table creation with our custom script
-   bun run migration:custom
-   ```
-   
-   Our custom migration script will:
-   - Try to run formal migrations first
-   - If no migrations are executed, it will directly create the necessary tables
-   - It provides detailed logging to help troubleshoot database setup issues
+**Migration**: `1710752401000-AddPerformanceIndexes.ts`
 
-6. Seed the database with initial data:
-   ```bash
-   bun run seed
-   ```
-   
-7. Start the development server:
-   ```bash
-   bun run start:dev
-   ```
+Added strategic indexes for optimal query performance:
 
-### Troubleshooting Database Issues
+```sql
+-- User authentication optimization
+CREATE INDEX idx_users_email ON users (email);
+CREATE INDEX idx_users_role ON users (role);
 
-If you continue to have issues with database connections:
+-- Task filtering optimization
+CREATE INDEX idx_tasks_user_id ON tasks (user_id);
+CREATE INDEX idx_tasks_status ON tasks (status);
+CREATE INDEX idx_tasks_priority ON tasks (priority);
+CREATE INDEX idx_tasks_due_date ON tasks (due_date);
+CREATE INDEX idx_tasks_created_at ON tasks (created_at);
 
-1. Check that PostgreSQL is properly installed and running:
-   ```bash
-   # On Linux/Mac
-   systemctl status postgresql
-   # or
-   pg_isready
-   
-   # On Windows
-   sc query postgresql
-   ```
+-- Composite indexes for common query patterns
+CREATE INDEX idx_tasks_user_status ON tasks (user_id, status);
+CREATE INDEX idx_tasks_user_priority ON tasks (user_id, priority);
 
-2. Verify your database credentials by connecting manually:
-   ```bash
-   psql -h localhost -U postgres -d taskflow
-   ```
+-- Partial index for overdue tasks
+CREATE INDEX idx_tasks_overdue ON tasks (due_date, status)
+WHERE due_date < NOW() AND status != 'COMPLETED';
+```
 
-3. If needed, manually create the schema from the migration files:
-   - Look at the SQL in `src/database/migrations/`
-   - Execute the SQL manually in your database
+### 2. Query Optimization
 
-### Default Users
+**Before**: Inefficient N+1 queries and in-memory filtering
+**After**: Optimized queries with proper joins and database-level filtering
 
-The seeded database includes two users:
+#### Key Improvements:
 
-1. Admin User:
-   - Email: admin@example.com
-   - Password: admin123
-   - Role: admin
+- **QueryBuilder**: Using TypeORM QueryBuilder for complex queries
+- **Selective Field Loading**: Only loading required fields
+- **Eager Loading**: Proper relation loading with `leftJoinAndSelect`
+- **Database-Level Filtering**: Moving filtering logic to SQL level
+- **Cursor-Based Pagination**: Efficient pagination without offset issues
 
-2. Regular User:
-   - Email: user@example.com
-   - Password: user123
-   - Role: user
+#### Example Query Optimization:
 
-## Challenge Overview
+```typescript
+// Before: Inefficient
+const tasks = await this.tasksRepository.find({
+  relations: ['user'],
+});
 
-This codebase contains a partially implemented task management API that suffers from various architectural, performance, and security issues. Your task is to analyze, refactor, and enhance the codebase to create a production-ready, scalable, and secure application.
+// After: Optimized
+const queryBuilder = this.tasksRepository
+  .createQueryBuilder('task')
+  .leftJoinAndSelect('task.user', 'user')
+  .select(['task.id', 'task.title', 'task.status', 'user.id', 'user.name'])
+  .where('task.userId = :userId', { userId })
+  .andWhere('task.status = :status', { status })
+  .orderBy('task.createdAt', 'DESC')
+  .limit(limit + 1);
+```
 
-## Core Problem Areas
+## 🗄️ Caching Strategy
 
-The codebase has been intentionally implemented with several critical issues that need to be addressed:
+### 1. Redis Implementation
 
-### 1. Performance & Scalability Issues
+**Service**: `RedisCacheService`
 
-- N+1 query problems throughout the application
-- Inefficient in-memory filtering and pagination that won't scale
-- Excessive database roundtrips in batch operations
-- Poorly optimized data access patterns
+Replaced in-memory cache with Redis for:
 
-### 2. Architectural Weaknesses
+- **Distributed Caching**: Works across multiple application instances
+- **Persistence**: Survives application restarts
+- **Memory Management**: Automatic TTL and eviction policies
+- **Bulk Operations**: Efficient batch operations
 
-- Inappropriate separation of concerns (e.g., controllers directly using repositories)
-- Missing domain abstractions and service boundaries
-- Lack of transaction management for multi-step operations
-- Tightly coupled components with high interdependency
+#### Features:
 
-### 3. Security Vulnerabilities
+- **Namespaced Keys**: Prevents key collisions
+- **Configurable TTL**: Flexible expiration times
+- **Bulk Operations**: `mset` and `mget` for performance
+- **Health Checks**: Redis connectivity monitoring
+- **Error Handling**: Graceful fallbacks
 
-- Inadequate authentication mechanism with several vulnerabilities
-- Improper authorization checks that can be bypassed
-- Unprotected sensitive data exposure in error responses
-- Insecure rate limiting implementation
+#### Cache Patterns:
 
-### 4. Reliability & Resilience Gaps
+```typescript
+// User data caching
+await this.cacheService.set(`user:${userId}`, userData, { ttl: 300 });
 
-- Ineffective error handling strategies
-- Missing retry mechanisms for distributed operations
-- Lack of graceful degradation capabilities
-- In-memory caching that fails in distributed environments
+// Task list caching with filter hash
+const cacheKey = this.generateCacheKey('findAll', filterDto);
+await this.cacheService.set(cacheKey, result, { ttl: 300 });
 
-## Implementation Requirements
+// Cache invalidation
+await this.invalidateUserTaskCache(userId);
+```
 
-Your implementation should address the following areas:
+### 2. Cache Invalidation Strategy
 
-### 1. Performance Optimization
+- **Write-Through**: Cache updated immediately after database writes
+- **Selective Invalidation**: Only invalidate related caches
+- **Pattern-Based Clearing**: Clear user-specific caches when needed
 
-- Implement efficient database query strategies with proper joins and eager loading
-- Create a performant filtering and pagination system
-- Optimize batch operations with bulk database operations
-- Add appropriate indexing strategies
+## 📦 Batch Operations
 
-### 2. Architectural Improvements
+### 1. Bulk Create Operations
 
-- Implement proper domain separation and service abstractions
-- Create a consistent transaction management strategy
-- Apply SOLID principles throughout the codebase
-- Implement at least one advanced pattern (e.g., CQRS, Event Sourcing)
+```typescript
+async bulkCreate(tasks: CreateTaskDto[]): Promise<Task[]> {
+  const queryRunner = this.tasksRepository.manager.connection.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
 
-### 3. Security Enhancements
+  try {
+    const createdTasks = [];
+    for (const taskDto of tasks) {
+      const task = this.tasksRepository.create(taskDto);
+      const savedTask = await queryRunner.manager.save(Task, task);
+      createdTasks.push(savedTask);
+    }
+    await queryRunner.commitTransaction();
+    return createdTasks;
+  } catch (error) {
+    await queryRunner.rollbackTransaction();
+    throw error;
+  } finally {
+    await queryRunner.release();
+  }
+}
+```
 
-- Strengthen authentication with refresh token rotation
-- Implement proper authorization checks at multiple levels
-- Create a secure rate limiting system
-- Add data validation and sanitization
+### 2. Bulk Update Operations
 
-### 4. Resilience & Observability
+```typescript
+async bulkUpdateStatus(taskIds: string[], status: TaskStatus): Promise<Task[]> {
+  // Transaction-based bulk update with proper error handling
+  // Cache invalidation for affected tasks
+}
+```
 
-- Implement comprehensive error handling and recovery mechanisms
-- Add proper logging with contextual information
-- Create meaningful health checks
-- Implement at least one observability pattern
+## 📈 Performance Monitoring
 
-## Advanced Challenge Areas
+### 1. Query Performance Tracking
 
-For senior engineers, we expect solutions to also address:
+**Service**: `PerformanceMonitorService`
 
-### 1. Distributed Systems Design
+Tracks:
 
-- Create solutions that work correctly in multi-instance deployments
-- Implement proper distributed caching with invalidation strategies
-- Handle concurrent operations safely
-- Design for horizontal scaling
+- Query execution time
+- Success/failure rates
+- Slow query detection (>1000ms)
+- Query patterns and optimization opportunities
 
-### 2. System Reliability
+### 2. Cache Performance Metrics
 
-- Implement circuit breakers for external service calls
-- Create graceful degradation pathways for non-critical features
-- Add self-healing mechanisms
-- Design fault isolation boundaries
+Monitors:
 
-### 3. Performance Under Load
+- Cache hit/miss rates
+- Total cache requests
+- Cache efficiency percentages
 
-- Optimize for high throughput scenarios
-- Implement backpressure mechanisms
-- Create efficient resource utilization strategies
-- Design for predictable performance under varying loads
+### 3. Performance Endpoints
 
-## Evaluation Criteria
+```typescript
+// GET /performance/metrics - Comprehensive performance report
+// GET /performance/queries - Database query statistics
+// GET /performance/cache - Cache performance statistics
+```
 
-Your solution will be evaluated on:
+## 🔧 Configuration
 
-1. **Problem Analysis**: How well you identify and prioritize the core issues
-2. **Technical Implementation**: The quality and cleanliness of your code
-3. **Architectural Thinking**: Your approach to solving complex design problems
-4. **Performance Improvements**: Measurable enhancements to system performance
-5. **Security Awareness**: Your identification and remediation of vulnerabilities
-6. **Testing Strategy**: The comprehensiveness of your test coverage
-7. **Documentation**: The clarity of your explanation of key decisions
+### Environment Variables
 
-## Submission Guidelines
+```env
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
 
-1. Fork this repository to your own GitHub account
-2. Make regular, meaningful commits that tell a story
-3. Create a comprehensive README.md in your forked repository containing:
-   - Analysis of the core problems you identified
-   - Overview of your architectural approach
-   - Performance and security improvements made
-   - Key technical decisions and their rationale
-   - Any tradeoffs you made and why
-4. Ensure your repository is public so we can review your work
-5. Submit the link to your public GitHub repository
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=password
+DB_DATABASE=taskflow
+```
 
-## API Endpoints
+### Cache Configuration
 
-The API should expose the following endpoints:
+```typescript
+// Default TTL values
+private readonly CACHE_TTL = 300; // 5 minutes
+private readonly CACHE_PREFIX = 'tasks';
+```
 
-### Authentication
-- `POST /auth/login` - Authenticate a user
-- `POST /auth/register` - Register a new user
+## 📊 Performance Metrics
 
-### Tasks
-- `GET /tasks` - List tasks with filtering and pagination
-- `GET /tasks/:id` - Get task details
-- `POST /tasks` - Create a task
-- `PATCH /tasks/:id` - Update a task
-- `DELETE /tasks/:id` - Delete a task
-- `POST /tasks/batch` - Batch operations on tasks
+### Expected Improvements
 
-Good luck! This challenge is designed to test the skills of experienced engineers in creating scalable, maintainable, and secure systems.
+1. **Database Queries**: 60-80% reduction in query time
+2. **Cache Hit Rate**: 70-90% cache efficiency
+3. **Response Times**: 50-70% faster API responses
+4. **Scalability**: Support for 10x more concurrent users
+
+### Monitoring Dashboard
+
+Access performance metrics at:
+
+- `/performance/metrics` - Overall performance
+- `/performance/queries` - Database performance
+- `/performance/cache` - Cache performance
+
+## 🚀 Usage Examples
+
+### Efficient Task Filtering
+
+```typescript
+// GET /tasks?status=PENDING&priority=HIGH&limit=20&cursor=abc123
+const filterDto: TaskFilterDto = {
+  status: TaskStatus.PENDING,
+  priority: TaskPriority.HIGH,
+  limit: 20,
+  cursor: 'abc123',
+};
+
+const result = await tasksService.findAll(filterDto);
+// Returns: { data: Task[], nextCursor: string, hasMore: boolean }
+```
+
+### Bulk Operations
+
+```typescript
+// POST /tasks/batch/create
+const tasks = [
+  { title: 'Task 1', userId: 'user1' },
+  { title: 'Task 2', userId: 'user1' },
+];
+await tasksService.bulkCreate(tasks);
+
+// POST /tasks/batch/update-status
+await tasksService.bulkUpdateStatus(['task1', 'task2'], TaskStatus.COMPLETED);
+```
+
+## 🔍 Best Practices
+
+1. **Always use pagination** for list endpoints
+2. **Implement proper cache invalidation** after writes
+3. **Monitor slow queries** and optimize them
+4. **Use bulk operations** for multiple items
+5. **Set appropriate TTL** for different data types
+6. **Monitor cache hit rates** and adjust strategies
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+1. **High Cache Miss Rate**
+
+   - Check TTL settings
+   - Review cache invalidation logic
+   - Monitor cache key patterns
+
+2. **Slow Queries**
+
+   - Check database indexes
+   - Review query execution plans
+   - Optimize WHERE clauses
+
+3. **Memory Issues**
+   - Monitor Redis memory usage
+   - Adjust TTL values
+   - Implement cache size limits
+
+### Performance Monitoring
+
+Use the performance endpoints to:
+
+- Identify bottlenecks
+- Monitor trends over time
+- Set up alerts for performance degradation
+- Plan capacity scaling
+
+# Architectural Improvements Implementation
+
+This document outlines the comprehensive architectural improvements implemented in the NestJS application, focusing on Domain-Driven Design (DDD), CQRS, Event Sourcing, and SOLID principles.
+
+## 🏗️ Overview
+
+The architectural improvements focus on four main areas:
+
+1. **Domain-Driven Design (DDD)**
+2. **CQRS (Command Query Responsibility Segregation)**
+3. **Event Sourcing**
+4. **SOLID Principles & Transaction Management**
+
+## 🎯 Domain-Driven Design (DDD)
+
+### 1. Domain Layer Structure
+
+```
+src/domain/
+├── entities/
+│   ├── base.entity.ts          # Base entity with common properties
+│   └── task.aggregate.ts       # Task aggregate root
+├── value-objects/
+│   ├── email.value-object.ts   # Email value object
+│   ├── task-status.value-object.ts
+│   └── task-priority.value-object.ts
+└── events/
+    ├── domain-event.ts         # Base domain event
+    └── task-events.ts          # Task-specific events
+```
+
+### 2. Value Objects
+
+**Email Value Object**:
+
+```typescript
+export class Email {
+  private readonly value: string;
+
+  constructor(email: string) {
+    if (!this.isValid(email)) {
+      throw new Error('Invalid email format');
+    }
+    this.value = email.toLowerCase().trim();
+  }
+
+  getValue(): string {
+    return this.value;
+  }
+  getDomain(): string {
+    return this.value.split('@')[1];
+  }
+  equals(other: Email): boolean {
+    return this.value === other.value;
+  }
+}
+```
+
+**Task Status Value Object**:
+
+```typescript
+export class TaskStatus {
+  canTransitionTo(newStatus: TaskStatusEnum): boolean {
+    const validTransitions = {
+      PENDING: [TaskStatusEnum.IN_PROGRESS, TaskStatusEnum.CANCELLED],
+      IN_PROGRESS: [TaskStatusEnum.COMPLETED, TaskStatusEnum.CANCELLED],
+      COMPLETED: [],
+      CANCELLED: [],
+    };
+    return validTransitions[this.value].includes(newStatus);
+  }
+}
+```
+
+### 3. Aggregate Root
+
+**TaskAggregate** implements:
+
+- **Encapsulation**: Private fields with controlled access
+- **Business Logic**: Status transitions, validation rules
+- **Event Sourcing**: Uncommitted events tracking
+- **Invariants**: Business rule enforcement
+
+```typescript
+export class TaskAggregate extends BaseEntity {
+  changeStatus(newStatus: TaskStatusEnum, changedBy: string): void {
+    if (!this.status.canTransitionTo(newStatus)) {
+      throw new Error(`Invalid status transition`);
+    }
+
+    const oldStatus = this.status.getValue();
+    this.status = TaskStatus.create(newStatus);
+
+    this.raiseEvent(new TaskStatusChangedEvent(this.id, oldStatus, newStatus, changedBy));
+  }
+}
+```
+
+## 🔄 CQRS Implementation
+
+### 1. Command Side
+
+**Commands**:
+
+```typescript
+export class CreateTaskCommand extends BaseCommand {
+  constructor(
+    public readonly title: string,
+    public readonly description: string,
+    public readonly userId: string,
+    public readonly priority: TaskPriorityEnum,
+    public readonly dueDate?: Date,
+  ) {
+    super();
+  }
+}
+```
+
+**Command Handler**:
+
+```typescript
+@Injectable()
+export class TaskCommandHandler {
+  async handleCreateTask(command: CreateTaskCommand): Promise<TaskAggregate> {
+    return this.transactionService.executeWrite(async entityManager => {
+      const task = new TaskAggregate(
+        command.title,
+        command.description,
+        command.userId,
+        command.priority,
+        command.dueDate,
+      );
+
+      const savedTask = await entityManager.save(TaskAggregate, task);
+
+      // Publish domain events
+      const events = task.getUncommittedEvents();
+      for (const event of events) {
+        await this.eventBus.publish(event);
+      }
+
+      return savedTask;
+    });
+  }
+}
+```
+
+### 2. Query Side
+
+**Queries**:
+
+```typescript
+export class GetTasksQuery extends BaseQuery {
+  constructor(
+    public readonly userId?: string,
+    public readonly status?: TaskStatusEnum,
+    public readonly priority?: TaskPriorityEnum,
+    public readonly search?: string,
+    // ... other filters
+  ) {
+    super();
+  }
+}
+```
+
+**Query Handler**:
+
+```typescript
+@Injectable()
+export class TaskQueryHandler {
+  async handleGetTasks(query: GetTasksQuery): Promise<PaginationResult<TaskAggregate>> {
+    return this.transactionService.executeReadOnly(async entityManager => {
+      const queryBuilder = this.buildTaskQuery(query);
+      return this.executePaginatedQuery(queryBuilder, query);
+    });
+  }
+}
+```
+
+### 3. Application Service
+
+**Orchestration Layer**:
+
+```typescript
+@Injectable()
+export class TaskApplicationService {
+  async createTask(title: string, description: string, userId: string): Promise<TaskAggregate> {
+    const command = new CreateTaskCommand(title, description, userId);
+    return this.commandBus.execute(command);
+  }
+
+  async getTasks(filters: any): Promise<PaginationResult<TaskAggregate>> {
+    const query = new GetTasksQuery(filters.userId, filters.status, filters.priority);
+    return this.queryBus.execute(query);
+  }
+}
+```
+
+## 📡 Event Sourcing
+
+### 1. Domain Events
+
+**Base Event**:
+
+```typescript
+export abstract class DomainEvent {
+  public readonly occurredOn: Date;
+  public readonly eventId: string;
+  public readonly aggregateId: string;
+  public readonly eventType: string;
+
+  abstract getEventData(): any;
+}
+```
+
+**Task Events**:
+
+```typescript
+export class TaskCreatedEvent extends DomainEvent {
+  constructor(
+    aggregateId: string,
+    public readonly title: string,
+    public readonly description: string,
+    public readonly status: TaskStatusEnum,
+    public readonly priority: TaskPriorityEnum,
+    public readonly userId: string,
+    public readonly dueDate?: Date,
+  ) {
+    super(aggregateId);
+  }
+}
+```
+
+### 2. Event Handlers
+
+```typescript
+@Injectable()
+@EventsHandler(TaskCreatedEvent, TaskStatusChangedEvent, TaskCompletedEvent)
+export class TaskEventHandler
+  implements IEventHandler<TaskCreatedEvent>, IEventHandler<TaskStatusChangedEvent>
+{
+  async handle(event: TaskCreatedEvent): Promise<void> {
+    // Invalidate caches
+    await this.invalidateUserTaskCache(event.userId);
+
+    // Add to processing queue
+    await this.taskQueue.add('task-created', {
+      taskId: event.aggregateId,
+      userId: event.userId,
+      priority: event.priority,
+    });
+  }
+}
+```
+
+## 🔒 Transaction Management
+
+### 1. Transaction Service
+
+**Consistent Transaction Handling**:
+
+```typescript
+@Injectable()
+export class TransactionService {
+  async executeInTransaction<T>(
+    operation: (entityManager: EntityManager) => Promise<T>,
+    options: TransactionOptions = {},
+  ): Promise<T> {
+    const { isolationLevel = 'READ COMMITTED', maxRetries = 3 } = options;
+
+    let retryCount = 0;
+    while (retryCount <= maxRetries) {
+      const queryRunner = this.dataSource.createQueryRunner();
+
+      try {
+        await queryRunner.startTransaction(isolationLevel as any);
+        const result = await operation(queryRunner.manager);
+        await queryRunner.commitTransaction();
+        return result;
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+
+        if (this.isRetryableError(error) && retryCount < maxRetries) {
+          retryCount++;
+          await this.sleep(Math.pow(2, retryCount) * 1000);
+          continue;
+        }
+        throw error;
+      } finally {
+        await queryRunner.release();
+      }
+    }
+  }
+}
+```
+
+### 2. Saga Pattern
+
+**Distributed Transaction Support**:
+
+```typescript
+async executeSaga<T>(
+  operations: Array<{
+    execute: (entityManager: EntityManager) => Promise<T>;
+    compensate: (entityManager: EntityManager, data: T) => Promise<void>;
+  }>
+): Promise<T[]> {
+  const results: T[] = [];
+  const compensations: Array<() => Promise<void>> = [];
+
+  try {
+    for (const operation of operations) {
+      const result = await this.executeInTransaction(operation.execute);
+      results.push(result);
+
+      compensations.push(async () => {
+        await this.executeInTransaction(async (manager) => {
+          await operation.compensate(manager, result);
+        });
+      });
+    }
+    return results;
+  } catch (error) {
+    // Execute compensations in reverse order
+    for (let i = compensations.length - 1; i >= 0; i--) {
+      await compensations[i]();
+    }
+    throw error;
+  }
+}
+```
+
+## 🎯 SOLID Principles Implementation
+
+### 1. Single Responsibility Principle (SRP)
+
+- **TaskAggregate**: Manages task business logic only
+- **TaskCommandHandler**: Handles commands only
+- **TaskQueryHandler**: Handles queries only
+- **TransactionService**: Manages transactions only
+
+### 2. Open/Closed Principle (OCP)
+
+- **BaseEntity**: Open for extension, closed for modification
+- **DomainEvent**: New event types can be added without changing existing code
+- **Value Objects**: Immutable and extensible
+
+### 3. Liskov Substitution Principle (LSP)
+
+- **BaseEntity**: All entities can be substituted for their base type
+- **DomainEvent**: All events can be handled by the event bus
+
+### 4. Interface Segregation Principle (ISP)
+
+- **IEventHandler**: Specific interfaces for each event type
+- **Command/Query**: Separate interfaces for commands and queries
+
+### 5. Dependency Inversion Principle (DIP)
+
+- **Application Service**: Depends on abstractions (CommandBus, QueryBus)
+- **Event Handlers**: Depends on event abstractions
+- **Transaction Service**: Depends on DataSource abstraction
+
+## 📊 Benefits Achieved
+
+### 1. **Scalability**
+
+- **Read/Write Separation**: Independent scaling of read and write operations
+- **Event-Driven**: Loose coupling through domain events
+- **Caching**: Optimized read models with Redis
+
+### 2. **Maintainability**
+
+- **Clear Boundaries**: Domain, application, and infrastructure layers
+- **Business Logic**: Centralized in domain entities
+- **Testability**: Easy to unit test each component
+
+### 3. **Performance**
+
+- **Optimized Queries**: Dedicated query models
+- **Caching Strategy**: Smart cache invalidation
+- **Transaction Management**: Proper isolation levels
+
+### 4. **Flexibility**
+
+- **Event Sourcing**: Complete audit trail
+- **Saga Pattern**: Complex business workflows
+- **CQRS**: Independent evolution of read/write models
+
+## 🔧 Configuration
+
+### 1. Module Setup
+
+```typescript
+@Module({
+  imports: [
+    CqrsModule,
+    TypeOrmModule.forFeature([TaskAggregate]),
+    BullModule.registerQueue({ name: 'task-processing' }),
+  ],
+  providers: [
+    TaskCommandHandler,
+    TaskQueryHandler,
+    TaskEventHandler,
+    TaskApplicationService,
+    TransactionService,
+  ],
+  exports: [TaskApplicationService],
+})
+export class TasksModule {}
+```
+
+### 2. Environment Variables
+
+```env
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=password
+DB_DATABASE=taskflow
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# JWT
+JWT_SECRET=your-secret-key
+JWT_REFRESH_SECRET=refresh-secret
+```
+
+## 🚀 Usage Examples
+
+### 1. Creating a Task
+
+```typescript
+// Controller
+@Post()
+async createTask(@Body() createTaskDto: CreateTaskDto) {
+  return this.taskApplicationService.createTask(
+    createTaskDto.title,
+    createTaskDto.description,
+    createTaskDto.userId,
+    createTaskDto.priority,
+    createTaskDto.dueDate
+  );
+}
+```
+
+### 2. Querying Tasks
+
+```typescript
+// Controller
+@Get()
+async getTasks(@Query() filters: TaskFilterDto) {
+  return this.taskApplicationService.getTasks({
+    userId: filters.userId,
+    status: filters.status,
+    priority: filters.priority,
+    search: filters.search,
+    limit: filters.limit,
+    cursor: filters.cursor,
+  });
+}
+```
+
+### 3. Business Operations
+
+```typescript
+// Dashboard
+@Get('dashboard/:userId')
+async getDashboard(@Param('userId') userId: string) {
+  return this.taskApplicationService.getTaskDashboard(userId);
+}
+
+// Analytics
+@Get('analytics')
+async getAnalytics(@Query('userId') userId?: string) {
+  return this.taskApplicationService.getTaskAnalytics(userId);
+}
+```
+
+## 🔍 Best Practices
+
+1. **Domain Events**: Always raise events for state changes
+2. **Transaction Boundaries**: Use appropriate isolation levels
+3. **Caching Strategy**: Invalidate caches on writes
+4. **Error Handling**: Implement proper retry mechanisms
+5. **Validation**: Validate at domain level
+6. **Testing**: Unit test domain logic, integration test workflows
+
+## 🛠️ Monitoring & Observability
+
+- **Event Tracking**: All domain events are logged
+- **Transaction Monitoring**: Performance metrics for transactions
+- **Cache Statistics**: Hit/miss rates and performance
+- **Queue Monitoring**: BullMQ dashboard for job processing
+
+The architectural improvements provide a solid foundation for scalable, maintainable, and performant applications while following industry best practices and design patterns.
+
+# Security Enhancements Implementation
+
+This document outlines the comprehensive security enhancements implemented in the NestJS application, focusing on authentication, authorization, rate limiting, and data validation.
+
+## 🛡️ Overview
+
+The security enhancements focus on four main areas:
+
+1. **Enhanced Authentication with Refresh Token Rotation**
+2. **Multi-Level Authorization System**
+3. **Secure Rate Limiting**
+4. **Data Validation and Sanitization**
+
+## 🔐 1. Enhanced Authentication with Refresh Token Rotation
+
+### Features Implemented
+
+#### Refresh Token Rotation
+
+- **Token Rotation**: Each refresh token can only be used once
+- **Automatic Invalidation**: Old refresh tokens are immediately invalidated when new ones are issued
+- **Secure Storage**: Refresh tokens are stored as SHA-256 hashes in Redis
+- **Session Management**: Proper session tracking and validation
+
+#### Implementation Details
+
+```typescript
+// Enhanced refresh token strategy with rotation
+@Injectable()
+export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
+  async validate(req: Request, payload: any) {
+    // Check if refresh token is in cache (not revoked)
+    const isTokenValid = await this.cacheService.get(`refresh_token:${payload.sub}`);
+    if (!isTokenValid) {
+      throw new UnauthorizedException('Refresh token has been revoked');
+    }
+
+    // Verify the token hash matches
+    const tokenHash = await this.cacheService.get(`refresh_token_hash:${payload.sub}`);
+    if (!tokenHash || tokenHash !== this.hashToken(refreshToken)) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Implement token rotation - invalidate current refresh token
+    await this.cacheService.delete(`refresh_token:${payload.sub}`);
+    await this.cacheService.delete(`refresh_token_hash:${payload.sub}`);
+
+    return { userId: payload.sub, email: payload.email, role: payload.role, refreshToken };
+  }
+}
+```
+
+#### Security Benefits
+
+- **Prevents Token Reuse**: Each refresh token can only be used once
+- **Reduces Attack Surface**: Compromised refresh tokens are immediately invalidated
+- **Session Isolation**: Different sessions cannot share refresh tokens
+- **Audit Trail**: All token operations are logged and tracked
+
+## 🔒 2. Multi-Level Authorization System
+
+### Features Implemented
+
+#### Enhanced Authorization Guard
+
+The `EnhancedAuthGuard` implements 7 levels of security checks:
+
+1. **Token Validation**: Verifies JWT token authenticity and blacklist status
+2. **Session Validation**: Ensures user session is active and valid
+3. **User Status Check**: Validates user account is active
+4. **Role-based Authorization**: Checks user roles against required roles
+5. **Permission-based Authorization**: Validates specific permissions
+6. **Resource-based Authorization**: Ensures resource ownership
+7. **Rate Limiting Check**: Prevents abuse through rate limiting
+
+#### Implementation Details
+
+```typescript
+@Injectable()
+export class EnhancedAuthGuard implements CanActivate {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<Request>();
+
+    // Level 1: Token Validation
+    const token = this.extractTokenFromHeader(request);
+    const payload = await this.validateToken(token);
+
+    // Level 2: Session Validation
+    const sessionValid = await this.validateSession(payload.sub, request);
+
+    // Level 3: User Status Check
+    const user = await this.usersService.findOne(payload.sub);
+    if (!user || user.isActive === false) {
+      throw new UnauthorizedException('User account is inactive or not found');
+    }
+
+    // Level 4: Role-based Authorization
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>('roles', [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    // Level 5: Permission-based Authorization
+    const requiredPermissions = this.reflector.getAllAndOverride<string[]>('permissions', [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    // Level 6: Resource-based Authorization
+    const resourceOwnerCheck = this.reflector.getAllAndOverride<boolean>('checkResourceOwner', [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    // Level 7: Rate Limiting Check
+    const rateLimitExceeded = await this.checkRateLimit(request, user.id);
+
+    return true;
+  }
+}
+```
+
+#### Authorization Decorators
+
+```typescript
+// Role-based decorators
+export const AdminOnly = () => Roles('ADMIN');
+export const ManagerOrAdmin = () => Roles('MANAGER', 'ADMIN');
+export const AuthenticatedUser = () => Roles('USER', 'MANAGER', 'ADMIN');
+
+// Permission-based decorators
+export const CanReadUsers = () => Permissions('users:read');
+export const CanWriteUsers = () => Permissions('users:write');
+export const CanDeleteUsers = () => Permissions('users:delete');
+export const CanReadTasks = () => Permissions('tasks:read');
+export const CanWriteTasks = () => Permissions('tasks:write');
+export const CanDeleteTasks = () => Permissions('tasks:delete');
+
+// Combined decorators
+export const AdminAccess = () => {
+  return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
+    AdminOnly()(target, propertyKey, descriptor);
+    CanManageSystem()(target, propertyKey, descriptor);
+    return descriptor;
+  };
+};
+```
+
+#### Permission System
+
+```typescript
+private getRolePermissions(role: string): string[] {
+  const permissionMap = {
+    'ADMIN': [
+      'users:read', 'users:write', 'users:delete',
+      'tasks:read', 'tasks:write', 'tasks:delete',
+      'system:admin', 'reports:read', 'reports:write'
+    ],
+    'MANAGER': [
+      'users:read', 'tasks:read', 'tasks:write',
+      'reports:read', 'team:manage'
+    ],
+    'USER': [
+      'tasks:read', 'tasks:write:own',
+      'profile:read', 'profile:write'
+    ]
+  };
+
+  return permissionMap[role] || [];
+}
+```
+
+## 🚦 3. Secure Rate Limiting
+
+### Features Implemented
+
+#### Redis-based Rate Limiting
+
+- **Sliding Window**: Implements sliding window rate limiting for accurate tracking
+- **Per-User Limits**: Different rate limits for different user types
+- **Per-Endpoint Limits**: Customizable limits per API endpoint
+- **IP-based Limiting**: Fallback to IP-based limiting for anonymous users
+- **Configurable Windows**: Flexible time windows and request limits
+
+#### Implementation Details
+
+```typescript
+@Injectable()
+export class SecureRateLimitGuard implements CanActivate {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<Request>();
+    const response = context.switchToHttp().getResponse();
+
+    // Get rate limit configuration from decorator or use default
+    const config = this.getRateLimitConfig(context) || this.defaultConfig;
+
+    // Generate rate limit key
+    const key = this.generateKey(request, config);
+
+    // Check if rate limit is exceeded
+    const isExceeded = await this.checkRateLimit(key, config);
+
+    if (isExceeded) {
+      // Set rate limit headers
+      response.setHeader('X-RateLimit-Limit', config.maxRequests);
+      response.setHeader('X-RateLimit-Remaining', Math.max(0, remainingRequests));
+      response.setHeader('X-RateLimit-Reset', new Date(Date.now() + remainingTime).toISOString());
+      response.setHeader('Retry-After', Math.ceil(remainingTime / 1000));
+
+      throw new ForbiddenException({
+        message: 'Rate limit exceeded',
+        retryAfter: Math.ceil(remainingTime / 1000),
+        remainingRequests: Math.max(0, remainingRequests),
+      });
+    }
+
+    return true;
+  }
+}
+```
+
+#### Rate Limit Decorators
+
+```typescript
+// Predefined rate limit configurations
+export const StrictRateLimit = () =>
+  RateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 10,
+  });
+
+export const StandardRateLimit = () =>
+  RateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 100,
+  });
+
+export const AuthRateLimit = () =>
+  RateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 5, // Strict limit for authentication endpoints
+  });
+
+export const PerUserRateLimit = (maxRequests: number) =>
+  RateLimit({
+    windowMs: 15 * 60 * 1000,
+    maxRequests,
+    keyGenerator: request => {
+      const userId = (request as any).user?.userId || 'anonymous';
+      return `rate_limit:user:${userId}`;
+    },
+  });
+```
+
+## 🧹 4. Data Validation and Sanitization
+
+### Features Implemented
+
+#### Secure Validation Pipe
+
+- **Input Sanitization**: Removes malicious content and normalizes data
+- **XSS Protection**: Prevents cross-site scripting attacks
+- **SQL Injection Protection**: Basic SQL injection pattern detection
+- **NoSQL Injection Protection**: MongoDB injection pattern detection
+- **Command Injection Protection**: Shell command injection prevention
+- **Prototype Pollution Protection**: Prevents prototype pollution attacks
+- **Payload Size Limits**: Prevents large payload attacks
+- **Nesting Depth Limits**: Prevents deep object nesting attacks
+
+#### Implementation Details
+
+```typescript
+@Injectable()
+export class SecureValidationPipe implements PipeTransform<any> {
+  async transform(value: any, { metatype }: ArgumentMetadata) {
+    // Step 1: Sanitize input data
+    const sanitizedValue = this.sanitizeInput(value);
+
+    // Step 2: Transform to DTO class
+    const object = plainToClass(metatype, sanitizedValue, this.options.transformOptions);
+
+    // Step 3: Validate the object
+    const errors = await validate(object, this.options);
+
+    // Step 4: Additional security checks
+    this.performSecurityChecks(object);
+
+    return object;
+  }
+
+  private sanitizeString(str: string): string {
+    // Remove null bytes and control characters
+    let sanitized = str.replace(/[\x00-\x1F\x7F]/g, '');
+
+    // Normalize unicode characters
+    sanitized = sanitized.normalize('NFC');
+
+    // Remove potential XSS vectors
+    sanitized = DOMPurify.sanitize(sanitized, {
+      ALLOWED_TAGS: [], // No HTML tags allowed
+      ALLOWED_ATTR: [], // No attributes allowed
+    });
+
+    // Escape HTML entities
+    sanitized = escape(sanitized);
+
+    // Remove SQL injection patterns
+    const sqlPatterns = [
+      /(\b(union|select|insert|update|delete|drop|create|alter|exec|execute|script)\b)/gi,
+      /(\b(or|and)\b\s+\d+\s*=\s*\d+)/gi,
+    ];
+
+    sqlPatterns.forEach(pattern => {
+      sanitized = sanitized.replace(pattern, '');
+    });
+
+    return sanitized;
+  }
+}
+```
+
+#### Security Checks
+
+```typescript
+private performSecurityChecks(object: any): void {
+  // Check for potential security issues
+  this.checkForSuspiciousPatterns(object);
+  this.checkForLargePayloads(object);
+  this.checkForNestedObjects(object);
+}
+
+private checkForSuspiciousPatterns(object: any): void {
+  const suspiciousPatterns = [
+    /<script/i,
+    /javascript:/i,
+    /vbscript:/i,
+    /on\w+\s*=/i,
+    /data:text\/html/i,
+    /data:application\/javascript/i,
+  ];
+
+  // Recursively check all values for suspicious patterns
+  if (checkValue(object)) {
+    throw new BadRequestException('Suspicious content detected');
+  }
+}
+```
+
+## 🚀 Usage Examples
+
+### Applying Security to Controllers
+
+```typescript
+@Controller('tasks')
+@UseGuards(EnhancedAuthGuard, SecureRateLimitGuard)
+export class TasksController {
+  @Post()
+  @UsePipes(SecureValidationPipe)
+  @AuthRateLimit()
+  @CanWriteTasks()
+  @CheckResourceOwner()
+  async createTask(@Body() createTaskDto: CreateTaskDto) {
+    return this.tasksService.create(createTaskDto);
+  }
+
+  @Get()
+  @StandardRateLimit()
+  @CanReadTasks()
+  async findAll(@Query() filterDto: TaskFilterDto) {
+    return this.tasksService.findAll(filterDto);
+  }
+
+  @Get(':id')
+  @PerUserRateLimit(50)
+  @CanReadTasks()
+  async findOne(@Param('id') id: string) {
+    return this.tasksService.findOne(id);
+  }
+
+  @Put(':id')
+  @UsePipes(SecureValidationPipe)
+  @StrictRateLimit()
+  @CanWriteTasks()
+  @CheckResourceOwner()
+  async updateTask(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto) {
+    return this.tasksService.update(id, updateTaskDto);
+  }
+}
+```
+
+### Applying Security to Auth Endpoints
+
+```typescript
+@Controller('auth')
+@UseGuards(SecureRateLimitGuard)
+export class AuthController {
+  @Post('login')
+  @AuthRateLimit()
+  @UsePipes(SecureValidationPipe)
+  async login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto);
+  }
+
+  @Post('register')
+  @AuthRateLimit()
+  @UsePipes(SecureValidationPipe)
+  async register(@Body() registerDto: RegisterDto) {
+    return this.authService.register(registerDto);
+  }
+
+  @Post('refresh')
+  @AuthRateLimit()
+  @UseGuards(RefreshTokenStrategy)
+  async refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
+    return this.authService.refreshToken(refreshTokenDto.refreshToken);
+  }
+}
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```env
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key
+JWT_REFRESH_SECRET=your-super-secret-refresh-key
+JWT_EXPIRES_IN=1h
+JWT_REFRESH_EXPIRES_IN=7d
+
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=your-redis-password
+REDIS_DB=0
+
+# Rate Limiting Configuration
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+RATE_LIMIT_AUTH_MAX_REQUESTS=5
+
+# Security Configuration
+MAX_PAYLOAD_SIZE=1048576
+MAX_NESTING_DEPTH=10
+```
+
+### Module Configuration
+
+```typescript
+@Module({
+  imports: [
+    // Security modules
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => [
+        {
+          ttl: configService.get('RATE_LIMIT_WINDOW_MS', 900000),
+          limit: configService.get('RATE_LIMIT_MAX_REQUESTS', 100),
+        },
+      ],
+    }),
+  ],
+  providers: [
+    // Security providers
+    SecureValidationPipe,
+    SecureRateLimitGuard,
+    EnhancedAuthGuard,
+  ],
+})
+export class AppModule {}
+```
+
+## 📊 Security Monitoring
+
+### Rate Limit Headers
+
+The system automatically sets rate limit headers on all responses:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 2024-01-15T10:30:00.000Z
+Retry-After: 900
+```
+
+### Security Logging
+
+All security events are logged with appropriate levels:
+
+```typescript
+// Authentication events
+this.logger.log(`User ${userId} logged in successfully`);
+this.logger.warn(`Failed login attempt for email: ${email}`);
+this.logger.error(`Token validation failed: ${error.message}`);
+
+// Authorization events
+this.logger.warn(`Access denied for user ${userId} to resource ${resourceId}`);
+this.logger.error(`Permission check failed: ${error.message}`);
+
+// Rate limiting events
+this.logger.warn(`Rate limit exceeded for IP: ${ip}`);
+this.logger.error(`Rate limiting error: ${error.message}`);
+
+// Validation events
+this.logger.warn(`Suspicious content detected in request`);
+this.logger.error(`Validation failed: ${error.message}`);
+```
+
+## 🛡️ Security Best Practices
+
+### 1. Token Management
+
+- Use short-lived access tokens (1 hour)
+- Implement refresh token rotation
+- Store token hashes, not plain tokens
+- Implement token blacklisting
+
+### 2. Authorization
+
+- Use principle of least privilege
+- Implement role-based and permission-based access control
+- Validate resource ownership
+- Log all authorization decisions
+
+### 3. Rate Limiting
+
+- Use sliding window rate limiting
+- Implement different limits for different endpoints
+- Set appropriate limits for authentication endpoints
+- Monitor and adjust limits based on usage patterns
+
+### 4. Input Validation
+
+- Sanitize all user inputs
+- Validate data types and formats
+- Check for malicious patterns
+- Limit payload sizes and nesting depths
+
+### 5. Monitoring and Logging
+
+- Log all security events
+- Monitor for suspicious patterns
+- Set up alerts for security violations
+- Regularly review security logs
+
+This comprehensive security implementation provides a robust foundation for protecting the application against common security threats while maintaining flexibility for future enhancements.
+
+
+# Resilience & Observability Implementation
+
+This document outlines the comprehensive Resilience & Observability features implemented in the NestJS Task Management System.
+
+## 🎯 **Overview**
+
+The system now includes enterprise-grade resilience patterns and comprehensive observability capabilities to ensure high availability, fault tolerance, and complete system visibility.
+
+## 🛡️ **Resilience Features**
+
+### 1. **Circuit Breaker Pattern**
+
+The `ResilienceService` implements the Circuit Breaker pattern to prevent cascading failures and provide graceful degradation.
+
+#### **Circuit Breaker States:**
+- **CLOSED**: Normal operation, requests pass through
+- **OPEN**: Circuit is open, requests fail fast
+- **HALF_OPEN**: Testing if service has recovered
+
+#### **Configuration:**
+```typescript
+const options: ResilienceOptions = {
+  circuitBreaker: {
+    failureThreshold: 5,        // Failures before opening circuit
+    recoveryTimeout: 30000,     // 30 seconds before retry
+    expectedResponseTime: 1000, // 1 second threshold
+  }
+};
+```
+
+#### **Usage Example:**
+```typescript
+// In any service
+const result = await this.resilienceService.executeWithResilience(
+  'database-query',
+  () => this.databaseService.query(),
+  {
+    circuitBreaker: { failureThreshold: 3, recoveryTimeout: 15000 },
+    retry: { maxAttempts: 2, backoffDelay: 1000 }
+  }
+);
+```
+
+### 2. **Retry Mechanisms**
+
+Automatic retry with exponential backoff for transient failures.
+
+#### **Retry Options:**
+```typescript
+const retryOptions: RetryOptions = {
+  maxAttempts: 3,           // Maximum retry attempts
+  backoffDelay: 1000,       // Base delay (1 second)
+  maxDelay: 10000,          // Maximum delay (10 seconds)
+};
+```
+
+#### **Backoff Strategy:**
+- Attempt 1: 1 second delay
+- Attempt 2: 2 seconds delay  
+- Attempt 3: 4 seconds delay
+- Maximum: 10 seconds delay
+
+### 3. **Timeout Handling**
+
+Configurable timeouts with fallback strategies.
+
+#### **Timeout Options:**
+```typescript
+const timeoutOptions: TimeoutOptions = {
+  timeout: 5000,            // 5 second timeout
+  fallback: () => 'default-value' // Fallback function
+};
+```
+
+### 4. **Fallback Strategies**
+
+Graceful degradation when services are unavailable.
+
+```typescript
+// Example: Fallback to cached data when database is slow
+const result = await this.resilienceService.executeWithResilience(
+  'user-profile',
+  () => this.userService.getProfile(userId),
+  {
+    timeout: { 
+      timeout: 2000,
+      fallback: () => this.cacheService.getUserProfile(userId)
+    }
+  }
+);
+```
+
+## 📊 **Observability Features**
+
+### 1. **Health Checks**
+
+Comprehensive health monitoring for all system components.
+
+#### **Health Check Endpoints:**
+- `GET /health` - Full system health check
+- `GET /health/ready` - Readiness probe (Kubernetes)
+- `GET /health/live` - Liveness probe (Kubernetes)
+- `GET /health/startup` - Startup probe (Kubernetes)
+
+#### **Health Check Components:**
+- **Database**: Connection and query capability
+- **Redis**: Cache connectivity and health
+- **Queues**: BullMQ job processing status
+- **Memory**: Heap usage and memory pressure
+- **Disk**: Storage availability
+- **External Services**: API dependencies
+
+#### **Health Status Levels:**
+- **Healthy**: All components operational
+- **Degraded**: Some components experiencing issues
+- **Unhealthy**: Critical components failing
+
+### 2. **Enhanced Logging**
+
+Structured logging with contextual information and metrics.
+
+#### **Log Levels:**
+- **ERROR**: System errors and failures
+- **WARN**: Warning conditions
+- **INFO**: General information
+- **DEBUG**: Detailed debugging
+- **VERBOSE**: Very detailed information
+
+#### **Contextual Logging:**
+```typescript
+// Log with context
+this.loggingService.logAuthEvent('login', userId, true, {
+  ip: request.ip,
+  userAgent: request.headers['user-agent'],
+  timestamp: new Date()
+});
+
+// Log API requests with timing
+const logResponse = this.loggingService.logApiRequest(
+  'POST', 
+  '/tasks', 
+  userId, 
+  requestId
+);
+
+// ... perform operation ...
+
+logResponse(); // Logs response with duration
+```
+
+#### **Log Metrics:**
+- Total log count by level
+- Logs by operation type
+- Average response times
+- Error rates and trends
+
+### 3. **Performance Monitoring**
+
+Real-time performance metrics and analysis.
+
+#### **Performance Endpoints:**
+- `GET /observability/performance` - Overall performance metrics
+- `GET /observability/performance/queries` - Database performance
+- `GET /observability/performance/cache` - Cache performance
+
+#### **Metrics Collected:**
+- **System Resources**: CPU, memory, disk usage
+- **Database**: Query performance, slow queries, connection pool
+- **Cache**: Hit rates, miss rates, Redis statistics
+- **API**: Response times, throughput, error rates
+
+### 4. **Resilience Monitoring**
+
+Circuit breaker status and resilience pattern metrics.
+
+#### **Resilience Endpoints:**
+- `GET /observability/resilience` - Circuit breaker status
+- `GET /observability/summary` - Comprehensive system overview
+
+#### **Circuit Breaker Metrics:**
+- Current state (CLOSED/OPEN/HALF_OPEN)
+- Failure and success counts
+- Last failure timestamp
+- Next retry attempt time
+
+## 🚀 **Usage Examples**
+
+### 1. **Implementing Resilience in Services**
+
+```typescript
+@Injectable()
+export class TaskService {
+  constructor(
+    private readonly resilienceService: ResilienceService,
+    private readonly loggingService: EnhancedLoggingService,
+  ) {}
+
+  async createTask(createTaskDto: CreateTaskDto): Promise<Task> {
+    const logContext = { userId: createTaskDto.userId, operation: 'create_task' };
+    
+    try {
+      const task = await this.resilienceService.executeWithResilience(
+        'create-task',
+        () => this.taskRepository.save(createTaskDto),
+        {
+          circuitBreaker: { failureThreshold: 3 },
+          retry: { maxAttempts: 2 },
+          timeout: { timeout: 5000 }
+        }
+      );
+
+      this.loggingService.logBusinessEvent(
+        'task_created',
+        'task',
+        task.id,
+        createTaskDto.userId,
+        logContext
+      );
+
+      return task;
+    } catch (error) {
+      this.loggingService.error(
+        'Failed to create task',
+        logContext,
+        error instanceof Error ? error : new Error('Unknown error')
+      );
+      throw error;
+    }
+  }
+}
+```
+
+### 2. **Health Check Integration**
+
+```typescript
+// In Kubernetes deployment
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+startupProbe:
+  httpGet:
+    path: /health/startup
+    port: 3000
+  failureThreshold: 30
+  periodSeconds: 10
+```
+
+### 3. **Monitoring and Alerting**
+
+```typescript
+// Example: Monitor circuit breaker status
+@Cron('*/30 * * * * *') // Every 30 seconds
+async monitorCircuitBreakers() {
+  const status = this.resilienceService.getCircuitBreakerStatus();
+  
+  Object.entries(status).forEach(([name, cb]) => {
+    if (cb.state === 'OPEN') {
+      this.loggingService.warn(`Circuit breaker ${name} is OPEN`, {
+        operation: 'circuit_breaker_monitoring',
+        circuitBreaker: name,
+        failureCount: cb.failureCount,
+        lastFailure: cb.lastFailureTime
+      });
+    }
+  });
+}
+```
+
+## 🔧 **Configuration**
+
+### 1. **Environment Variables**
+
+```env
+# Resilience Configuration
+RESILIENCE_CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
+RESILIENCE_CIRCUIT_BREAKER_RECOVERY_TIMEOUT=30000
+RESILIENCE_RETRY_MAX_ATTEMPTS=3
+RESILIENCE_RETRY_BACKOFF_DELAY=1000
+
+# Health Check Configuration
+HEALTH_CHECK_TIMEOUT=10000
+HEALTH_CHECK_INTERVAL=30000
+
+# Logging Configuration
+LOG_LEVEL=info
+LOG_MAX_ENTRIES=10000
+```
+
+### 2. **Service Configuration**
+
+```typescript
+// app.module.ts
+@Module({
+  providers: [
+    {
+      provide: 'RESILIENCE_CONFIG',
+      useValue: {
+        defaultCircuitBreaker: {
+          failureThreshold: 5,
+          recoveryTimeout: 30000,
+        },
+        defaultRetry: {
+          maxAttempts: 3,
+          backoffDelay: 1000,
+        }
+      }
+    }
+  ]
+})
+```
+
+## 📈 **Monitoring Dashboard**
+
+### 1. **Health Status Dashboard**
+
+- Real-time system health indicators
+- Component status and response times
+- Historical health trends
+
+### 2. **Performance Dashboard**
+
+- Response time percentiles
+- Throughput metrics
+- Resource utilization graphs
+
+### 3. **Resilience Dashboard**
+
+- Circuit breaker states
+- Failure rates and recovery times
+- Retry attempt statistics
+
+### 4. **Logging Dashboard**
+
+- Log volume by level
+- Error rate trends
+- Request/response patterns
+
+## 🚨 **Alerting and Notifications**
+
+### 1. **Health Check Alerts**
+
+- System unhealthy notifications
+- Component failure alerts
+- Recovery confirmations
+
+### 2. **Performance Alerts**
+
+- Response time thresholds
+- Error rate spikes
+- Resource exhaustion warnings
+
+### 3. **Resilience Alerts**
+
+- Circuit breaker openings
+- High failure rates
+- Recovery timeouts
+
+## 🧪 **Testing Resilience**
+
+### 1. **Circuit Breaker Testing**
+
+```typescript
+describe('ResilienceService', () => {
+  it('should open circuit breaker after failures', async () => {
+    // Simulate failures
+    for (let i = 0; i < 5; i++) {
+      try {
+        await service.executeWithResilience('test', () => Promise.reject(new Error('Test failure')));
+      } catch (error) {
+        // Expected
+      }
+    }
+
+    // Circuit should be open
+    const status = service.getCircuitBreakerStatus();
+    expect(status.test.state).toBe('OPEN');
+  });
+});
+```
+
+### 2. **Health Check Testing**
+
+```typescript
+describe('HealthController', () => {
+  it('should return healthy status when all services are up', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/health')
+      .expect(200);
+
+    expect(response.body.status).toBe('healthy');
+    expect(response.body.checks.database.status).toBe('healthy');
+    expect(response.body.checks.redis.status).toBe('healthy');
+  });
+});
+```
+
+## 🔍 **Troubleshooting**
+
+### 1. **Common Issues**
+
+- **Circuit Breaker Stuck Open**: Check recovery timeout configuration
+- **High Error Rates**: Review failure thresholds and retry policies
+- **Health Check Failures**: Verify service dependencies and connectivity
+
+### 2. **Debugging Commands**
+
+```bash
+# Check health status
+curl http://localhost:3000/health
+
+# View circuit breaker status
+curl http://localhost:3000/observability/resilience
+
+# Get recent logs
+curl http://localhost:3000/observability/logs/recent
+
+# Performance summary
+curl http://localhost:3000/observability/summary
+```
+
+## 📚 **Best Practices**
+
+### 1. **Resilience Patterns**
+
+- Use appropriate failure thresholds for different services
+- Implement meaningful fallback strategies
+- Monitor and adjust timeout values based on performance data
+
+### 2. **Health Checks**
+
+- Keep health checks lightweight and fast
+- Include all critical dependencies
+- Set appropriate timeouts and intervals
+
+### 3. **Logging**
+
+- Use structured logging with consistent context
+- Avoid logging sensitive information
+- Implement log rotation and retention policies
+
+### 4. **Monitoring**
+
+- Set up proactive alerting
+- Monitor trends and patterns
+- Use metrics for capacity planning
+
+## 🎉 **Benefits**
+
+1. **High Availability**: Circuit breakers prevent cascading failures
+2. **Fault Tolerance**: Automatic retry and fallback mechanisms
+3. **Visibility**: Complete system observability and monitoring
+4. **Operational Excellence**: Proactive issue detection and resolution
+5. **Scalability**: Performance monitoring for capacity planning
+6. **Compliance**: Comprehensive audit trails and logging
+
+This implementation provides enterprise-grade resilience and observability, ensuring the system can handle failures gracefully while providing complete visibility into its operation.
