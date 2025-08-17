@@ -7,6 +7,21 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
 
+/**
+ * AuthModule - Handles authentication and authorization
+ *
+ * This module provides:
+ * - JWT-based authentication
+ * - User registration and login
+ * - Password hashing and validation
+ * - JWT token generation and validation
+ *
+ * Architecture Notes:
+ * - Uses Passport.js for authentication strategies
+ * - Integrates with JWT for stateless authentication
+ * - Depends on UsersModule for user management
+ * - Configurable JWT settings via environment variables
+ */
 @Module({
   imports: [
     UsersModule,
@@ -15,9 +30,10 @@ import { UsersModule } from '../users/users.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get('jwt.secret'),
+        // Use environment variables directly for JWT configuration
+        secret: configService.get('JWT_SECRET'),
         signOptions: {
-          expiresIn: configService.get('jwt.expiresIn'),
+          expiresIn: configService.get('JWT_EXPIRES_IN'),
         },
       }),
     }),
@@ -26,4 +42,4 @@ import { UsersModule } from '../users/users.module';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })
-export class AuthModule {} 
+export class AuthModule {}
