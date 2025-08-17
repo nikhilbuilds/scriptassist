@@ -20,6 +20,7 @@ import { TaskStatus } from './enums/task-status.enum';
 import { TaskFilterDto } from './dto/task-filter.dto';
 import { PaginationMetaData, PaginationOptions } from '../../types/pagination.interface';
 import { TaskPriority } from './enums/task-priority.enum';
+import { Transactional } from 'typeorm-transactional';
 
 @Injectable()
 export class TasksService {
@@ -34,22 +35,20 @@ export class TasksService {
     try {
       const savedTask = await this.tasksRepository.save(this.tasksRepository.create(createTaskDto));
 
-      if ((savedTask.user as unknown as string) === createTaskDto.userId) {
-        this.taskQueue.add(
-          'task-status-update',
-          {
-            taskId: savedTask.id,
-            status: savedTask.status,
+      this.taskQueue.add(
+        'task-status-update',
+        {
+          taskId: savedTask.id,
+          status: savedTask.status,
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 1000,
           },
-          {
-            attempts: 3,
-            backoff: {
-              type: 'exponential',
-              delay: 1000,
-            },
-          },
-        );
-      }
+        },
+      );
 
       return savedTask;
     } catch (error) {
@@ -130,6 +129,7 @@ export class TasksService {
     })) as Task;
   }
 
+  @Transactional() // This is only needed if there are updates to multiple tables. Only here as an example.
   async update(
     id: string,
     taskOwnerId: string,
@@ -139,21 +139,24 @@ export class TasksService {
       { id, userId: taskOwnerId },
       { ...updateTaskDto },
     );
-    if ((updateResult.affected ?? 0) > 0 && updateTaskDto.status) {
-      this.taskQueue.add(
-        'task-status-update',
-        {
-          taskId: id,
-          status: updateTaskDto.status,
-        },
-        {
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 1000,
+    if ((updateResult.affected ?? 0) > 0) {
+      if (updateTaskDto.status) {
+        this.taskQueue.add(
+          'task-status-update',
+          {
+            taskId: id,
+            status: updateTaskDto.status,
           },
-        },
-      );
+          {
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 1000,
+            },
+          },
+        );
+      }
+
       return { message: 'Task updated successfully' };
     } else {
       throw new NotFoundException(`Task not found`);

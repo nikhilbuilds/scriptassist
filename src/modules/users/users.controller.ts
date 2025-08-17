@@ -32,15 +32,15 @@ import { RateLimit } from '@common/decorators/rate-limit.decorator';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Roles('admin')
   @UseGuards(RolesGuard)
+  @Roles('admin')
   @Post()
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }
 
-  @Roles('admin')
   @UseGuards(RolesGuard)
+  @Roles('admin')
   @Get()
   @ApiOperation({ summary: 'Get users' })
   async findAll(@Query() paginationDto: PaginationDto) {
@@ -63,8 +63,8 @@ export class UsersController {
     return this.usersService.update(id, updateUserDto);
   }
 
-  @Roles('admin')
   @UseGuards(RolesGuard)
+  @Roles('admin')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);

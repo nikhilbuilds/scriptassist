@@ -35,8 +35,8 @@ import { User } from '@modules/users/entities/user.entity';
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
-  @Roles('user')
   @UseGuards(RolesGuard)
+  @Roles('user')
   @Post()
   @ApiOperation({ summary: 'Create a new task' })
   create(@Body() createTaskDto: CreateTaskDto) {
@@ -46,7 +46,6 @@ export class TasksController {
   @Get()
   @ApiOperation({ summary: 'Find all tasks with optional filtering' })
   async findAll(@Req() request: Request, @Query() taskFilterDto: TaskFilterDto) {
-    if ((request.user as User).role === 'user') taskFilterDto.userId = (request.user as User).id;
     const { tasks, metaData } = await this.tasksService.findAll(taskFilterDto);
     return {
       data: tasks,
@@ -54,20 +53,20 @@ export class TasksController {
     };
   }
 
-  @Roles('admin')
   @UseGuards(RolesGuard)
+  @Roles('admin')
   @Get('stats')
   @ApiOperation({ summary: 'Get task statistics' })
   async getStats() {
     return this.tasksService.getStats();
   }
 
-  @Roles('user')
   @UseGuards(RolesGuard)
+  @Roles('user')
   @Get(':id')
   @ApiOperation({ summary: 'Find a task by ID' })
-  async findOne(@Req() request: Request, @Param('id') id: string) {
-    const task = await this.tasksService.findOne(id, (request.user as User).id);
+  async findOne(@Req() request: Request, @Param() uuidDto: UuidDTO) {
+    const task = await this.tasksService.findOne(uuidDto.id, (request.user as User).id);
     if (!task) {
       throw new HttpException(`Task not found`, HttpStatus.NOT_FOUND);
     }
@@ -82,16 +81,16 @@ export class TasksController {
     return this.tasksService.update(uuidDto.id, (request.user as User).id, updateTaskDto);
   }
 
-  @Roles('user')
   @UseGuards(RolesGuard)
+  @Roles('user')
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a task' })
-  remove(@Req() request: Request, @Param('id') id: string) {
-    return this.tasksService.remove(id, (request.user as User).id);
+  remove(@Req() request: Request, @Param() uuidDto: UuidDTO) {
+    return this.tasksService.remove(uuidDto.id, (request.user as User).id);
   }
 
-  @Roles('admin')
   @UseGuards(RolesGuard)
+  @Roles('admin')
   @Post('batch')
   @ApiOperation({ summary: 'Batch process multiple tasks' })
   async batchProcess(@Body() operations: TaskBatchProcessDTO) {
