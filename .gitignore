@@ -42,5 +42,8 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 
+# Test environment files
+test-env.js
+
 # Bun
 .bun 
