@@ -20,11 +20,7 @@ export class CacheService {
    * @param ttlSeconds The time-to-live in seconds. Defaults to 300.
    */
   async set(key: string, value: string | Buffer | number, ttlSeconds = 300): Promise<void> {
-    console.log('HITHIT', { ttlSeconds });
-    console.log('HITHIT', { ttlSeconds });
-    console.log('HITHIT', { ttlSeconds });
     const prefixedKey = this.keyPrefix + key;
-    console.log('HITHIT', { ttlSeconds });
     await this.client.set(prefixedKey, value, 'EX', ttlSeconds);
   }
 
