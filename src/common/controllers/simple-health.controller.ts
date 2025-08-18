@@ -1,10 +1,10 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { RateLimitGuard } from '../guards/rate-limit.guard';
+import { RedisRateLimitGuard } from '../guards/redis-rate-limit.guard';
 
 @ApiTags('health')
 @Controller('health')
-@UseGuards(RateLimitGuard)
+@UseGuards(RedisRateLimitGuard)
 export class SimpleHealthController {
   @Get()
   @ApiOperation({ summary: 'Health check endpoint' })

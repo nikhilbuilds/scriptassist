@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Task } from './entities/task.entity';
@@ -12,6 +12,7 @@ import { TaskPriority } from './enums/task-priority.enum';
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
   constructor(
     @InjectRepository(Task)
     private tasksRepository: Repository<Task>,
@@ -20,7 +21,6 @@ export class TasksService {
   ) {}
 
   async create(createTaskDto: CreateTaskDto): Promise<Task> {
-
     // Validate and convert dueDate if provided
     if (createTaskDto.dueDate) {
       const dueDate = new Date(createTaskDto.dueDate);
@@ -30,7 +30,7 @@ export class TasksService {
         );
       }
       // Convert to Date object for the entity
-      createTaskDto.dueDate = dueDate as any;
+      createTaskDto.dueDate = dueDate as Date;
     }
 
     // Create task with proper validation
@@ -46,7 +46,15 @@ export class TasksService {
     return savedTask;
   }
 
-  async findAll(filterDto?: ITaskFilter): Promise<{ data: Task[]; total: number; page: number; limit: number; totalPages: number; hasNext: boolean; hasPrev: boolean }> {
+  async findAll(filterDto?: ITaskFilter): Promise<{
+    data: Task[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  }> {
     const {
       status,
       priority,
@@ -55,7 +63,7 @@ export class TasksService {
       page: rawPage = 1,
       limit: rawLimit = 10,
       sortBy = 'createdAt',
-      sortOrder = 'DESC'
+      sortOrder = 'DESC',
     } = filterDto || {};
 
     // Ensure page and limit are valid numbers
@@ -81,10 +89,9 @@ export class TasksService {
     }
 
     if (search) {
-      queryBuilder.andWhere(
-        '(task.title ILIKE :search OR task.description ILIKE :search)',
-        { search: `%${search}%` }
-      );
+      queryBuilder.andWhere('(task.title ILIKE :search OR task.description ILIKE :search)', {
+        search: `%${search}%`,
+      });
     }
 
     // Apply sorting
@@ -110,7 +117,7 @@ export class TasksService {
       limit,
       totalPages,
       hasNext,
-      hasPrev
+      hasPrev,
     };
   }
 
@@ -128,50 +135,94 @@ export class TasksService {
   }
 
   async update(id: string, updateTaskDto: UpdateTaskDto): Promise<Task> {
-    // Inefficient implementation: multiple database calls
-    // and no transaction handling
-    const task = await this.findOne(id);
+    // Efficient implementation: Single database call with proper validation
+    const queryRunner = this.tasksRepository.manager.connection.createQueryRunner();
+    
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
 
-    const originalStatus = task.status;
+      // Get task with lock to prevent race conditions (without relations to avoid FOR UPDATE issues)
+      const task = await queryRunner.manager.findOne(Task, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    // Directly update each field individually
-    if (updateTaskDto.title) task.title = updateTaskDto.title;
-    if (updateTaskDto.description) task.description = updateTaskDto.description;
-    if (updateTaskDto.status) task.status = updateTaskDto.status;
-    if (updateTaskDto.priority) task.priority = updateTaskDto.priority;
-    if (updateTaskDto.dueDate) {
+      if (!task) {
+        throw new NotFoundException('Task not found');
+      }
+
+      const originalStatus = task.status;
+
+      // Validate and update fields efficiently
+      this.updateTaskFields(task, updateTaskDto);
+
+      // Save with transaction
+      const updatedTask = await queryRunner.manager.save(Task, task);
+      
+      await queryRunner.commitTransaction();
+
+      // Add to queue if status changed with proper error handling
+      if (originalStatus !== updatedTask.status) {
+        try {
+          await this.taskQueue.add('task-status-update', {
+            taskId: updatedTask.id,
+            status: updatedTask.status,
+          });
+        } catch (queueError) {
+          this.logger.warn(`Failed to add task status update to queue: ${queueError instanceof Error ? queueError.message : 'Unknown error'}`);
+        }
+      }
+
+      // Return the updated task with relations for consistency
+      return this.findOne(updatedTask.id);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  private updateTaskFields(task: Task, updateTaskDto: UpdateTaskDto): void {
+    // Efficient field updates with validation
+    if (updateTaskDto.title !== undefined) {
+      task.title = updateTaskDto.title;
+    }
+    if (updateTaskDto.description !== undefined) {
+      task.description = updateTaskDto.description;
+    }
+    if (updateTaskDto.status !== undefined) {
+      task.status = updateTaskDto.status;
+    }
+    if (updateTaskDto.priority !== undefined) {
+      task.priority = updateTaskDto.priority;
+    }
+    if (updateTaskDto.dueDate !== undefined) {
       const dueDate = new Date(updateTaskDto.dueDate);
       if (isNaN(dueDate.getTime())) {
-        throw new BadRequestException(
-          'Invalid dueDate format. Please provide a valid date string.',
-        );
+        throw new BadRequestException('Invalid dueDate format. Please provide a valid date string.');
       }
       task.dueDate = dueDate;
     }
-
-    const updatedTask = await this.tasksRepository.save(task);
-
-    // Add to queue if status changed, but without proper error handling
-    if (originalStatus !== updatedTask.status) {
-      this.taskQueue.add('task-status-update', {
-        taskId: updatedTask.id,
-        status: updatedTask.status,
-      });
-    }
-
-    return updatedTask;
   }
 
   async remove(id: string): Promise<void> {
-    // Inefficient implementation: two separate database calls
-    const task = await this.findOne(id);
-    await this.tasksRepository.remove(task);
+    // Efficient implementation: Single database call with proper error handling
+    const result = await this.tasksRepository.delete(id);
+    
+    if (result.affected === 0) {
+      throw new NotFoundException('Task not found');
+    }
   }
 
   async findByStatus(status: TaskStatus): Promise<Task[]> {
-    // Inefficient implementation: doesn't use proper repository patterns
-    const query = 'SELECT * FROM tasks WHERE status = $1';
-    return this.tasksRepository.query(query, [status]);
+    // Efficient implementation: Using TypeORM repository patterns
+    return this.tasksRepository.find({
+      where: { status },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async updateStatus(id: string, status: string): Promise<Task> {
@@ -185,10 +236,14 @@ export class TasksService {
     // Efficient approach: Use TypeORM count for aggregation
     const total = await this.tasksRepository.count();
     const completed = await this.tasksRepository.count({ where: { status: TaskStatus.COMPLETED } });
-    const inProgress = await this.tasksRepository.count({ where: { status: TaskStatus.IN_PROGRESS } });
+    const inProgress = await this.tasksRepository.count({
+      where: { status: TaskStatus.IN_PROGRESS },
+    });
     const pending = await this.tasksRepository.count({ where: { status: TaskStatus.PENDING } });
-    const highPriority = await this.tasksRepository.count({ where: { priority: TaskPriority.HIGH } });
-    
+    const highPriority = await this.tasksRepository.count({
+      where: { priority: TaskPriority.HIGH },
+    });
+
     return {
       total,
       completed,

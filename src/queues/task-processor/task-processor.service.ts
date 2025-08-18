@@ -17,14 +17,22 @@ export class TaskProcessorService extends WorkerHost {
     super();
   }
 
-  async process(job: Job): Promise<any> {
+  async process(job: Job): Promise<{
+    success: boolean;
+    message?: string;
+    taskId?: string;
+    newStatus?: TaskStatus;
+    processedAt?: string;
+    wasOverdue?: boolean;
+    dueDate?: string;
+  }> {
     this.logger.debug(`Processing job ${job.id} of type ${job.name}`);
-    
+
     const startTime = Date.now();
-    
+
     try {
       let result;
-      
+
       switch (job.name) {
         case 'task-status-update':
           result = await this.handleStatusUpdate(job);
@@ -36,22 +44,26 @@ export class TaskProcessorService extends WorkerHost {
           this.logger.warn(`Unknown job type: ${job.name}`);
           throw new Error(`Unknown job type: ${job.name}`);
       }
-      
+
       const processingTime = Date.now() - startTime;
       this.logger.log(`Job ${job.id} completed successfully in ${processingTime}ms`);
-      
+
       return result;
     } catch (error) {
       const processingTime = Date.now() - startTime;
-      this.logger.error(`Job ${job.id} failed after ${processingTime}ms: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      
+      this.logger.error(
+        `Job ${job.id} failed after ${processingTime}ms: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+
       // Implement exponential backoff retry strategy
       const attempts = job.attemptsMade;
       const maxRetries = 3;
-      
+
       if (attempts < maxRetries) {
         const delay = Math.pow(2, attempts) * 1000; // Exponential backoff: 1s, 2s, 4s
-        this.logger.warn(`Retrying job ${job.id} in ${delay}ms (attempt ${attempts + 1}/${maxRetries})`);
+        this.logger.warn(
+          `Retrying job ${job.id} in ${delay}ms (attempt ${attempts + 1}/${maxRetries})`,
+        );
         throw new Error(`Retry attempt ${attempts + 1}/${maxRetries}`);
       } else {
         this.logger.error(`Job ${job.id} failed permanently after ${maxRetries} attempts`);
@@ -64,42 +76,44 @@ export class TaskProcessorService extends WorkerHost {
 
   private async handleStatusUpdate(job: Job) {
     const { taskId, status } = job.data;
-    
+
     if (!taskId || !status) {
       throw new Error('Missing required data: taskId and status are required');
     }
-    
+
     // Validate status values
     const validStatuses = Object.values(TaskStatus);
     if (!validStatuses.includes(status)) {
       throw new Error(`Invalid status: ${status}. Valid statuses: ${validStatuses.join(', ')}`);
     }
-    
+
     // Use transaction for data consistency
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
-    
+
     try {
       const task = await this.tasksService.updateStatus(taskId, status);
-      
+
       // Additional processing within transaction
       if (status === TaskStatus.COMPLETED) {
         // Log completion metrics
         this.logger.log(`Task ${taskId} marked as completed`);
       }
-      
+
       await queryRunner.commitTransaction();
-      
-      return { 
+
+      return {
         success: true,
         taskId: task.id,
         newStatus: task.status,
-        processedAt: new Date().toISOString()
+        processedAt: new Date().toISOString(),
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      this.logger.error(`Transaction failed for task ${taskId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Transaction failed for task ${taskId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
       throw error;
     } finally {
       await queryRunner.release();
@@ -107,75 +121,79 @@ export class TaskProcessorService extends WorkerHost {
   }
 
   private async handleOverdueTasks(job: Job) {
-    const { taskId, dueDate } = job.data;
-    
+    const { taskId, dueDate: _dueDate } = job.data;
+
     if (!taskId) {
       throw new Error('Missing required data: taskId is required');
     }
-    
+
     this.logger.debug(`Processing overdue task notification for task ${taskId}`);
-    
+
     try {
       // Get task details
       const task = await this.tasksService.findOne(taskId);
-      
+
       if (!task) {
         throw new Error(`Task ${taskId} not found`);
       }
-      
+
       // Check if task is still overdue
       const now = new Date();
       const taskDueDate = new Date(task.dueDate);
-      
+
       if (taskDueDate >= now) {
         this.logger.debug(`Task ${taskId} is no longer overdue`);
-        return { 
-          success: true, 
+        return {
+          success: true,
           message: 'Task is no longer overdue',
           taskId,
-          wasOverdue: false
+          wasOverdue: false,
         };
       }
-      
+
       // Process overdue task notification
       // In a real implementation, this would send emails, push notifications, etc.
-      this.logger.log(`Sending overdue notification for task ${taskId} (due: ${taskDueDate.toISOString()})`);
-      
+      this.logger.log(
+        `Sending overdue notification for task ${taskId} (due: ${taskDueDate.toISOString()})`,
+      );
+
       // Simulate notification processing
       await this.simulateNotificationProcessing(task);
-      
-      return { 
+
+      return {
         success: true,
         message: 'Overdue task notification processed',
         taskId,
         wasOverdue: true,
         dueDate: taskDueDate.toISOString(),
-        processedAt: new Date().toISOString()
+        processedAt: new Date().toISOString(),
       };
     } catch (error) {
-      this.logger.error(`Failed to process overdue task ${taskId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Failed to process overdue task ${taskId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
       throw error;
     }
   }
-  
-  private async simulateNotificationProcessing(task: any): Promise<void> {
+
+  private async simulateNotificationProcessing(_task: any): Promise<void> {
     // Simulate external service call (email, push notification, etc.)
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     // Simulate potential failure (10% failure rate for testing)
     if (Math.random() < 0.1) {
       throw new Error('Notification service temporarily unavailable');
     }
   }
-  
-  private async logToDeadLetterQueue(job: Job, error: any): Promise<void> {
+
+  private async logToDeadLetterQueue(job: Job, error: unknown): Promise<void> {
     // In a production environment, this would log to a dead letter queue
     // or monitoring system like Sentry, DataDog, etc.
     this.logger.error(`Dead letter queue entry - Job ${job.id}:`, {
       jobName: job.name,
       jobData: job.data,
       error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
-} 
+}

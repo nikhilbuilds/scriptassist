@@ -13,7 +13,7 @@ export class SecurityMiddleware implements NestMiddleware {
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-    
+
     // Content Security Policy
     const csp = [
       "default-src 'self'",
@@ -25,12 +25,12 @@ export class SecurityMiddleware implements NestMiddleware {
       "frame-ancestors 'none'",
     ].join('; ');
     res.setHeader('Content-Security-Policy', csp);
-    
+
     // HSTS (HTTP Strict Transport Security)
     if (this.configService.get('NODE_ENV') === 'production') {
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
-    
+
     // Request size limit check
     const contentLength = parseInt(req.headers['content-length'] || '0');
     const maxSize = 10 * 1024 * 1024; // 10MB limit
@@ -41,7 +41,7 @@ export class SecurityMiddleware implements NestMiddleware {
         statusCode: 413,
       });
     }
-    
+
     // Basic request validation
     if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
       const contentType = req.headers['content-type'];
@@ -53,13 +53,13 @@ export class SecurityMiddleware implements NestMiddleware {
         });
       }
     }
-    
+
     // Log security events
     this.logSecurityEvent(req);
-    
+
     next();
   }
-  
+
   private logSecurityEvent(req: Request) {
     const suspiciousPatterns = [
       /<script/i,
@@ -69,16 +69,16 @@ export class SecurityMiddleware implements NestMiddleware {
       /drop\s+table/i,
       /exec\s*\(/i,
     ];
-    
+
     const url = req.url;
     const userAgent = req.headers['user-agent'] || '';
     const ip = req.ip;
-    
+
     // Check for suspicious patterns
-    const isSuspicious = suspiciousPatterns.some(pattern => 
-      pattern.test(url) || pattern.test(userAgent)
+    const isSuspicious = suspiciousPatterns.some(
+      pattern => pattern.test(url) || pattern.test(userAgent),
     );
-    
+
     if (isSuspicious) {
       console.warn(`Security Alert - Suspicious request detected:`, {
         ip,

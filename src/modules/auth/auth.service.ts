@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
@@ -18,21 +18,21 @@ export class AuthService {
     const { email, password } = loginDto;
 
     const user = await this.usersService.findByEmail(email);
-    
+
     if (!user) {
       throw new UnauthorizedException('Invalid email');
     }
 
     const passwordValid = await bcrypt.compare(password, user.password);
-    
+
     if (!passwordValid) {
       throw new UnauthorizedException('Invalid password');
     }
 
-    const payload = { 
-      sub: user.id, 
-      email: user.email, 
-      role: user.role
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -80,25 +80,25 @@ export class AuthService {
     };
   }
 
-
-
-  async validateUser(userId: string): Promise<any> {
+  async validateUser(
+    userId: string,
+  ): Promise<{ id: string; email: string; name: string; role: string } | null> {
     const user = await this.usersService.findOne(userId);
-    
+
     if (!user) {
       return null;
     }
-    
+
     return user;
   }
 
   async validateUserRoles(userId: string, requiredRoles: string[]): Promise<boolean> {
     const user = await this.usersService.findOne(userId);
-    
+
     if (!user) {
       return false;
     }
-    
+
     return requiredRoles.includes(user.role);
   }
 
@@ -107,14 +107,14 @@ export class AuthService {
 
     // Verify the refresh token
     const payload = this.verifyRefreshToken(refreshToken);
-    
+
     if (payload.type !== JWT_CONSTANTS.REFRESH_TOKEN_TYPE) {
       throw new UnauthorizedException('Invalid token type');
     }
 
     // Get user from database
     const user = await this.usersService.findOne(payload.sub);
-    
+
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
@@ -147,10 +147,12 @@ export class AuthService {
     // This would require changing the JWT secret which affects all users
     // For now, we'll just validate the token and return success
     const { refreshToken } = revokeTokenDto;
-    
+
     try {
       this.verifyRefreshToken(refreshToken);
-      return { message: 'Token validation successful (Note: JWT tokens cannot be individually revoked)' };
+      return {
+        message: 'Token validation successful (Note: JWT tokens cannot be individually revoked)',
+      };
     } catch (error) {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -161,17 +163,22 @@ export class AuthService {
       sub: userId,
       type: JWT_CONSTANTS.REFRESH_TOKEN_TYPE,
     };
-    
+
     return this.jwtService.sign(payload, {
       expiresIn: JWT_CONSTANTS.REFRESH_TOKEN_EXPIRES_IN,
     });
   }
 
-  private verifyRefreshToken(token: string): any {
+  private verifyRefreshToken(token: string): {
+    sub: string;
+    type: string;
+    iat: number;
+    exp: number;
+  } {
     try {
       return this.jwtService.verify(token);
     } catch (error) {
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
-} 
+}
