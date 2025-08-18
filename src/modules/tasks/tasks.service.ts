@@ -6,6 +6,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { ITaskFilter, ITaskStats } from '../../common/interfaces/task.interface';
 import { TaskStatus } from './enums/task-status.enum';
 import { TaskPriority } from './enums/task-priority.enum';
 
@@ -45,7 +46,7 @@ export class TasksService {
     return savedTask;
   }
 
-  async findAll(filterDto?: any): Promise<{ data: Task[]; total: number; page: number; limit: number; totalPages: number; hasNext: boolean; hasPrev: boolean }> {
+  async findAll(filterDto?: ITaskFilter): Promise<{ data: Task[]; total: number; page: number; limit: number; totalPages: number; hasNext: boolean; hasPrev: boolean }> {
     const {
       status,
       priority,
@@ -180,7 +181,7 @@ export class TasksService {
     return this.tasksRepository.save(task);
   }
 
-  async getStats() {
+  async getStats(): Promise<ITaskStats> {
     // Efficient approach: Use TypeORM count for aggregation
     const total = await this.tasksRepository.count();
     const completed = await this.tasksRepository.count({ where: { status: TaskStatus.COMPLETED } });

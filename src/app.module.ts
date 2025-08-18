@@ -10,7 +10,6 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TaskProcessorModule } from './queues/task-processor/task-processor.module';
 import { ScheduledTasksModule } from './queues/scheduled-tasks/scheduled-tasks.module';
 import { CacheService } from './common/services/cache.service';
-import { SecurityMiddleware } from './common/middleware/security.middleware';
 import { SimpleObservabilityModule } from './common/modules/simple-observability.module';
 import { SimpleRateLimitGuard } from './common/guards/simple-rate-limit.guard';
 
@@ -45,7 +44,7 @@ import { SimpleRateLimitGuard } from './common/guards/simple-rate-limit.guard';
     ThrottlerModule.forRoot([
       {
         ttl: 60,
-        limit: 30,
+        limit: 10, // More restrictive for security
       },
     ]),
     
@@ -83,10 +82,4 @@ import { SimpleRateLimitGuard } from './common/guards/simple-rate-limit.guard';
     CacheService
   ]
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(SecurityMiddleware)
-      .forRoutes('*'); // Apply to all routes
-  }
-} 
+export class AppModule {} 

@@ -1,8 +1,10 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { RefreshTokenDto, RevokeTokenDto } from './dto/refresh-token.dto';
+import { JWT_CONSTANTS } from '../../config/jwt.config';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -33,8 +35,14 @@ export class AuthService {
       role: user.role
     };
 
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: JWT_CONSTANTS.ACCESS_TOKEN_EXPIRES_IN,
+    });
+    const refreshToken = await this.generateRefreshToken(user.id);
+
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: accessToken,
+      refresh_token: refreshToken,
       user: {
         id: user.id,
         email: user.email,
@@ -52,23 +60,27 @@ export class AuthService {
 
     const user = await this.usersService.create(registerDto);
 
-    const token = this.generateToken(user.id);
+    const accessToken = this.jwtService.sign(
+      { sub: user.id },
+      {
+        expiresIn: JWT_CONSTANTS.ACCESS_TOKEN_EXPIRES_IN,
+      },
+    );
+    const refreshToken = await this.generateRefreshToken(user.id);
 
     return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         role: user.role,
       },
-      token,
     };
   }
 
-  private generateToken(userId: string) {
-    const payload = { sub: userId };
-    return this.jwtService.sign(payload);
-  }
+
 
   async validateUser(userId: string): Promise<any> {
     const user = await this.usersService.findOne(userId);
@@ -88,5 +100,78 @@ export class AuthService {
     }
     
     return requiredRoles.includes(user.role);
+  }
+
+  async refreshToken(refreshTokenDto: RefreshTokenDto) {
+    const { refreshToken } = refreshTokenDto;
+
+    // Verify the refresh token
+    const payload = this.verifyRefreshToken(refreshToken);
+    
+    if (payload.type !== JWT_CONSTANTS.REFRESH_TOKEN_TYPE) {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
+    // Get user from database
+    const user = await this.usersService.findOne(payload.sub);
+    
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Generate new tokens
+    const accessPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
+
+    const newAccessToken = this.jwtService.sign(accessPayload, {
+      expiresIn: JWT_CONSTANTS.ACCESS_TOKEN_EXPIRES_IN,
+    });
+    const newRefreshToken = this.generateRefreshToken(user.id);
+
+    return {
+      access_token: newAccessToken,
+      refresh_token: newRefreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+    };
+  }
+
+  async revokeToken(revokeTokenDto: RevokeTokenDto) {
+    // With JWT refresh tokens, we can't revoke individual tokens
+    // This would require changing the JWT secret which affects all users
+    // For now, we'll just validate the token and return success
+    const { refreshToken } = revokeTokenDto;
+    
+    try {
+      this.verifyRefreshToken(refreshToken);
+      return { message: 'Token validation successful (Note: JWT tokens cannot be individually revoked)' };
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+  }
+
+  private generateRefreshToken(userId: string): string {
+    const payload = {
+      sub: userId,
+      type: JWT_CONSTANTS.REFRESH_TOKEN_TYPE,
+    };
+    
+    return this.jwtService.sign(payload, {
+      expiresIn: JWT_CONSTANTS.REFRESH_TOKEN_EXPIRES_IN,
+    });
+  }
+
+  private verifyRefreshToken(token: string): any {
+    try {
+      return this.jwtService.verify(token);
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 } 

@@ -4,7 +4,7 @@ import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { BatchTaskDto, BatchAction } from './dto/batch-task.dto';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { TaskStatus } from './enums/task-status.enum';
 import { TaskPriority } from './enums/task-priority.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -22,7 +22,15 @@ export class TasksController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new task (user ID from JWT token)' })
+  @ApiOperation({ 
+    summary: 'Create a new task',
+    description: 'Create a new task for the authenticated user. User ID is automatically extracted from JWT token.'
+  })
+  @ApiBody({ type: CreateTaskDto })
+  @ApiResponse({ status: 201, description: 'Task created successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid request data' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   create(@Body() createTaskDto: CreateTaskDto, @CurrentUser() user: any) {
     // Automatically use the user ID from JWT token
     const taskWithUserId = {
@@ -36,11 +44,17 @@ export class TasksController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Find all tasks for current user with optional filtering and pagination' })
-  @ApiQuery({ name: 'status', required: false })
-  @ApiQuery({ name: 'priority', required: false })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
+  @ApiOperation({ 
+    summary: 'Get all tasks for current user',
+    description: 'Retrieve all tasks for the authenticated user with optional filtering by status/priority and pagination support.'
+  })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by task status' })
+  @ApiQuery({ name: 'priority', required: false, description: 'Filter by task priority' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 10, max: 100)' })
+  @ApiResponse({ status: 200, description: 'Tasks retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async findAll(
     @Query('status') status?: string,
     @Query('priority') priority?: string,
@@ -58,30 +72,15 @@ export class TasksController {
   }
 
   @Get('stats')
-  @ApiOperation({ summary: 'Get task statistics' })
+  @ApiOperation({ 
+    summary: 'Get task statistics',
+    description: 'Retrieve aggregated statistics for all tasks including total, completed, in-progress, pending, and high-priority counts.'
+  })
+  @ApiResponse({ status: 200, description: 'Task statistics retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async getStats() {
     return this.tasksService.getStats();
-  }
-
-  @Get('me/tasks')
-  @ApiOperation({ summary: 'Get current user tasks - Example of getting user from JWT' })
-  async getMyTasks(@CurrentUser() user: any, @Req() request: Request) {
-    // Method 1: Using custom decorator (cleanest way)
-    const userId = user?.id;
-    const userEmail = user?.email;
-    const userRole = user?.role;
-    
-    // Now you can use the user info to filter tasks
-    return {
-      message: 'Current user tasks',
-      user: {
-        id: userId,
-        email: userEmail,
-        role: userRole
-      },
-      // You could filter tasks by user ID here
-      // tasks: await this.tasksService.findByUserId(userId)
-    };
   }
 
   @Get(':id')
