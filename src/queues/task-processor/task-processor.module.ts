@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { TaskProcessorService } from './task-processor.service';
 import { TasksModule } from '../../modules/tasks/tasks.module';
 
+
 @Module({
   imports: [
     BullModule.registerQueue({
@@ -11,6 +12,6 @@ import { TasksModule } from '../../modules/tasks/tasks.module';
     TasksModule,
   ],
   providers: [TaskProcessorService],
-  exports: [TaskProcessorService],
+  exports: [TaskProcessorService, BullModule],
 })
 export class TaskProcessorModule {} 

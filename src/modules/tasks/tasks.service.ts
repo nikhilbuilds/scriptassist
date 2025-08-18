@@ -19,6 +19,7 @@ export class TasksService {
   ) {}
 
   async create(createTaskDto: CreateTaskDto): Promise<Task> {
+
     // Validate and convert dueDate if provided
     if (createTaskDto.dueDate) {
       const dueDate = new Date(createTaskDto.dueDate);
@@ -137,7 +138,15 @@ export class TasksService {
     if (updateTaskDto.description) task.description = updateTaskDto.description;
     if (updateTaskDto.status) task.status = updateTaskDto.status;
     if (updateTaskDto.priority) task.priority = updateTaskDto.priority;
-    if (updateTaskDto.dueDate) task.dueDate = updateTaskDto.dueDate;
+    if (updateTaskDto.dueDate) {
+      const dueDate = new Date(updateTaskDto.dueDate);
+      if (isNaN(dueDate.getTime())) {
+        throw new BadRequestException(
+          'Invalid dueDate format. Please provide a valid date string.',
+        );
+      }
+      task.dueDate = dueDate;
+    }
 
     const updatedTask = await this.tasksRepository.save(task);
 

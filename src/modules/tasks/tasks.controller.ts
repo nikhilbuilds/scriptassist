@@ -1,18 +1,20 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, HttpException, HttpStatus, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, HttpException, HttpStatus, UseInterceptors, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { BatchTaskDto, BatchAction } from './dto/batch-task.dto';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { TaskStatus } from './enums/task-status.enum';
 import { TaskPriority } from './enums/task-priority.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Throttle } from '@nestjs/throttler';
-import { AdvancedRateLimitGuard } from '../../common/guards/advanced-rate-limit.guard';
+import { SimpleRateLimitGuard } from '../../common/guards/simple-rate-limit.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('tasks')
 @Controller('tasks')
-@UseGuards(JwtAuthGuard, AdvancedRateLimitGuard)
-@Throttle({ default: { ttl: 60, limit: 30 } })
+@UseGuards(JwtAuthGuard, SimpleRateLimitGuard)
 @ApiBearerAuth()
 export class TasksController {
   constructor(
@@ -20,13 +22,21 @@ export class TasksController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new task' })
-  create(@Body() createTaskDto: CreateTaskDto) {
-    return this.tasksService.create(createTaskDto);
+  @ApiOperation({ summary: 'Create a new task (user ID from JWT token)' })
+  create(@Body() createTaskDto: CreateTaskDto, @CurrentUser() user: any) {
+    // Automatically use the user ID from JWT token
+    const taskWithUserId = {
+      ...createTaskDto,
+      userId: user.id // Add user ID from JWT token
+    };
+    
+
+    
+    return this.tasksService.create(taskWithUserId);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Find all tasks with optional filtering and pagination' })
+  @ApiOperation({ summary: 'Find all tasks for current user with optional filtering and pagination' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'priority', required: false })
   @ApiQuery({ name: 'page', required: false })
@@ -36,12 +46,14 @@ export class TasksController {
     @Query('priority') priority?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @CurrentUser() user?: any,
   ) {
     return this.tasksService.findAll({
       status,
       priority,
       page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 10
+      limit: limit ? parseInt(limit, 10) : 10,
+      userId: user?.id // Filter by current user's tasks
     });
   }
 
@@ -49,6 +61,27 @@ export class TasksController {
   @ApiOperation({ summary: 'Get task statistics' })
   async getStats() {
     return this.tasksService.getStats();
+  }
+
+  @Get('me/tasks')
+  @ApiOperation({ summary: 'Get current user tasks - Example of getting user from JWT' })
+  async getMyTasks(@CurrentUser() user: any, @Req() request: Request) {
+    // Method 1: Using custom decorator (cleanest way)
+    const userId = user?.id;
+    const userEmail = user?.email;
+    const userRole = user?.role;
+    
+    // Now you can use the user info to filter tasks
+    return {
+      message: 'Current user tasks',
+      user: {
+        id: userId,
+        email: userEmail,
+        role: userRole
+      },
+      // You could filter tasks by user ID here
+      // tasks: await this.tasksService.findByUserId(userId)
+    };
   }
 
   @Get(':id')
@@ -80,22 +113,43 @@ export class TasksController {
   }
 
   @Post('batch')
-  @ApiOperation({ summary: 'Batch process multiple tasks' })
-  async batchProcess(@Body() operations: { tasks: string[], action: string }) {
-    // Inefficient batch processing: Sequential processing instead of bulk operations
-    const { tasks: taskIds, action } = operations;
+  @ApiOperation({ summary: 'Batch process multiple tasks for current user' })
+  @ApiResponse({ status: 200, description: 'Batch operation completed successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid request data' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async batchProcess(
+    @Body() batchTaskDto: BatchTaskDto,
+    @CurrentUser() user: any
+  ) {
+    const { tasks: taskIds, action } = batchTaskDto;
     const results = [];
     
-    // N+1 query problem: Processing tasks one by one
+    // Process tasks for current user only
     for (const taskId of taskIds) {
       try {
+        // First verify the task belongs to the current user
+        const task = await this.tasksService.findOne(taskId);
+        
+        if (!task) {
+          results.push({ taskId, success: false, error: 'Task not found' });
+          continue;
+        }
+        
+        if (task.userId !== user.id) {
+          results.push({ taskId, success: false, error: 'Access denied - task does not belong to current user' });
+          continue;
+        }
+        
         let result;
         
         switch (action) {
-          case 'complete':
+          case BatchAction.COMPLETE:
             result = await this.tasksService.update(taskId, { status: TaskStatus.COMPLETED });
             break;
-          case 'delete':
+          case BatchAction.IN_PROGRESS:
+            result = await this.tasksService.update(taskId, { status: TaskStatus.IN_PROGRESS });
+            break;
+          case BatchAction.DELETE:
             result = await this.tasksService.remove(taskId);
             break;
           default:
@@ -104,7 +158,6 @@ export class TasksController {
         
         results.push({ taskId, success: true, result });
       } catch (error) {
-        // Inconsistent error handling
         results.push({ 
           taskId, 
           success: false, 
@@ -113,6 +166,11 @@ export class TasksController {
       }
     }
     
-    return results;
+    return {
+      message: `Batch processed ${taskIds.length} tasks`,
+      action,
+      userId: user.id,
+      results
+    };
   }
 } 

@@ -3,8 +3,8 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { Request } from 'express';
 
 @Injectable()
-export class AdvancedRateLimitGuard extends ThrottlerGuard {
-  protected getTracker(req: Request): string {
+export class SimpleRateLimitGuard extends ThrottlerGuard {
+  protected async getTracker(req: Request): Promise<string> {
     // Use user ID if authenticated, otherwise use IP address
     const user = (req as any).user;
     if (user && user.id) {
@@ -20,32 +20,22 @@ export class AdvancedRateLimitGuard extends ThrottlerGuard {
   ): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse();
-    
+
     // Get the tracker (user ID or IP)
-    const tracker = this.getTracker(request);
-    
-    // Check if user is authenticated for stricter limits
-    const user = (request as any).user;
-    const isAuthenticated = !!user;
-    
-    // Apply different limits based on authentication status
-    let effectiveLimit = limit;
-    if (!isAuthenticated) {
-      effectiveLimit = Math.floor(limit * 0.5); // Reduce limit for unauthenticated users
-    }
-    
+    const tracker = await this.getTracker(request);
+
     // Check rate limit
     const { totalHits, timeToExpire } = await this.storageService.increment(
       tracker,
       ttl,
     );
-    
+
     // Add rate limit headers
-    response.header('X-RateLimit-Limit', effectiveLimit.toString());
-    response.header('X-RateLimit-Remaining', Math.max(0, effectiveLimit - totalHits).toString());
+    response.header('X-RateLimit-Limit', limit.toString());
+    response.header('X-RateLimit-Remaining', Math.max(0, limit - totalHits).toString());
     response.header('X-RateLimit-Reset', new Date(Date.now() + timeToExpire * 1000).toISOString());
-    
-    if (totalHits > effectiveLimit) {
+
+    if (totalHits > limit) {
       throw new HttpException(
         {
           message: 'Rate limit exceeded',
@@ -56,7 +46,7 @@ export class AdvancedRateLimitGuard extends ThrottlerGuard {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    
+
     return true;
   }
 }
