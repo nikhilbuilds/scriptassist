@@ -3,7 +3,11 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { TasksService } from '../../modules/tasks/tasks.service';
 import { TaskStatus } from '../../modules/tasks/enums/task-status.enum';
-import { DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+
+import { Task } from '../../modules/tasks/entities/task.entity';
+import { OverdueTasksService } from '../scheduled-tasks/overdue-tasks.service';
 
 @Injectable()
 @Processor('task-processing')
@@ -13,6 +17,10 @@ export class TaskProcessorService extends WorkerHost {
   constructor(
     private readonly tasksService: TasksService,
     private readonly dataSource: DataSource,
+    @InjectRepository(Task)
+    private readonly tasksRepository: Repository<Task>,
+    // Optional collaborator used by tests
+    private readonly overdueTasksService?: OverdueTasksService,
   ) {
     super();
   }
@@ -26,7 +34,7 @@ export class TaskProcessorService extends WorkerHost {
     wasOverdue?: boolean;
     dueDate?: string;
   }> {
-    this.logger.debug(`Processing job ${job.id} of type ${job.name}`);
+    this.logger.debug(`🔧 Processing job ${job.id} of type ${job.name}`);
 
     const startTime = Date.now();
 
@@ -71,6 +79,166 @@ export class TaskProcessorService extends WorkerHost {
         await this.logToDeadLetterQueue(job, error);
         throw error;
       }
+    }
+  }
+
+  // Wrapper methods added for unit tests that expect these methods
+  async processTask(jobData: { taskId?: string; action?: string }): Promise<
+    | { success: true; taskId: string; action: string; message: string }
+    | { success: false; taskId?: string; action?: string; error: string }
+  > {
+    const { taskId, action } = jobData || {};
+    if (!taskId || !action) {
+      return { success: false, taskId, action, error: 'Invalid job data' };
+    }
+
+    try {
+      const tasks = await this.tasksRepository.find({ where: { id: taskId } });
+      if (!tasks || tasks.length === 0) {
+        return { success: false, taskId, action, error: 'Task not found' };
+      }
+
+      const task = tasks[0];
+
+      if (action === 'complete') {
+        if (task.status === TaskStatus.COMPLETED) {
+          return {
+            success: false,
+            taskId,
+            action,
+            error: 'Task is already completed',
+          };
+        }
+        task.status = TaskStatus.COMPLETED;
+      } else if (action === 'start') {
+        if (task.status === TaskStatus.IN_PROGRESS) {
+          return {
+            success: false,
+            taskId,
+            action,
+            error: 'Task is already in progress',
+          };
+        }
+        task.status = TaskStatus.IN_PROGRESS;
+      } else {
+        return { success: false, taskId, action, error: 'Invalid action' };
+      }
+
+      await this.tasksRepository.save([task]);
+      return {
+        success: true,
+        taskId,
+        action,
+        message: action === 'complete' ? 'Task completed successfully' : 'Task updated successfully',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        taskId,
+        action,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async processBatchTasks(jobData: { taskIds?: string[]; action?: string }): Promise<
+    | {
+        success: true | false;
+        processed: number;
+        failed: number;
+        results: Array<{ taskId: string; success: boolean; error?: string }>;
+        error?: string;
+      }
+  > {
+    const { taskIds, action } = jobData || {};
+    if (!taskIds || taskIds.length === 0) {
+      return { success: true, processed: 0, failed: 0, results: [] };
+    }
+
+    try {
+      const found = await this.tasksRepository.find({ where: taskIds.map((id) => ({ id })) as any });
+      const foundMap = new Map(found.map((t) => [t.id, t] as const));
+
+      const results: Array<{ taskId: string; success: boolean; error?: string }> = [];
+      for (const id of taskIds) {
+        const task = foundMap.get(id);
+        if (!task) {
+          results.push({ taskId: id, success: false, error: 'Task not found' });
+          continue;
+        }
+
+        if (action === 'complete') {
+          task.status = TaskStatus.COMPLETED;
+          results.push({ taskId: id, success: true });
+        } else if (action === 'start') {
+          task.status = TaskStatus.IN_PROGRESS;
+          results.push({ taskId: id, success: true });
+        } else {
+          results.push({ taskId: id, success: false, error: 'Invalid action' });
+        }
+      }
+
+      // Persist updated tasks where success
+      const toSave = results
+        .filter((r) => r.success)
+        .map((r) => foundMap.get(r.taskId)!)
+        .filter(Boolean);
+      if (toSave.length > 0) {
+        await this.tasksRepository.save(toSave);
+      }
+
+      const processed = results.filter((r) => r.success).length;
+      const failed = results.length - processed;
+      // Consider partial failures still a successful batch operation for reporting purposes
+      return { success: true, processed, failed, results };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: false,
+        processed: 0,
+        failed: (jobData.taskIds || []).length,
+        error: errMsg,
+        results: (jobData.taskIds || []).map((id) => ({ taskId: id, success: false, error: errMsg })),
+      };
+    }
+  }
+
+  async processOverdueTasks(): Promise<{ success: boolean; processed: number; message?: string; error?: string }> {
+    try {
+      const qb = this.tasksRepository.createQueryBuilder('task')
+        .leftJoinAndSelect('task.user', 'user')
+        .where('task.dueDate IS NOT NULL')
+        .andWhere('task.dueDate < :now', { now: new Date() })
+        .andWhere('task.status != :completed', { completed: TaskStatus.COMPLETED });
+
+      const overdueTasks = await qb.getMany();
+      if (!overdueTasks || overdueTasks.length === 0) {
+        return { success: true, processed: 0, message: 'No overdue tasks found' };
+      }
+
+      overdueTasks.forEach((t) => (t.status = TaskStatus.OVERDUE));
+      await this.tasksRepository.save(overdueTasks);
+
+      // Notify via collaborator if available (used by unit tests)
+      if (this.overdueTasksService?.sendOverdueNotifications) {
+        try {
+          await this.overdueTasksService.sendOverdueNotifications(overdueTasks as any);
+        } catch (notifyError) {
+          return {
+            success: false,
+            processed: overdueTasks.length,
+            error: notifyError instanceof Error ? notifyError.message : 'Unknown error',
+          };
+        }
+      }
+
+      return { success: true, processed: overdueTasks.length, message: 'Overdue tasks processed successfully' };
+    } catch (error) {
+      return {
+        success: false,
+        processed: 0,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
   }
 

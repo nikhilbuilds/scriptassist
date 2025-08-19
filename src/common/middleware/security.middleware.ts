@@ -7,7 +7,7 @@ export class SecurityMiddleware implements NestMiddleware {
   constructor(private readonly configService: ConfigService) {}
 
   use(req: Request, res: Response, next: NextFunction) {
-    // Security Headers
+    // Security Headers - protect against common attacks
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
@@ -31,23 +31,23 @@ export class SecurityMiddleware implements NestMiddleware {
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
 
-    // Request size limit check
+    // Request size limit check - prevent memory attacks
     const contentLength = parseInt(req.headers['content-length'] || '0');
     const maxSize = 10 * 1024 * 1024; // 10MB limit
     if (contentLength > maxSize) {
       return res.status(413).json({
-        message: 'Request entity too large',
+        message: 'That file is way too big! Try something smaller.',
         error: 'Payload Too Large',
         statusCode: 413,
       });
     }
 
-    // Basic request validation
+    // Basic request validation - make sure they're sending JSON
     if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
       const contentType = req.headers['content-type'];
       if (!contentType || !contentType.includes('application/json')) {
         return res.status(400).json({
-          message: 'Content-Type must be application/json',
+          message: 'Please send JSON data, not something else',
           error: 'Bad Request',
           statusCode: 400,
         });

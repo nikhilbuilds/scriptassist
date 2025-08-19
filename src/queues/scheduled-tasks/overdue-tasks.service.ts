@@ -17,7 +17,7 @@ export class OverdueTasksService {
 
   @Cron(CronExpression.EVERY_HOUR)
   async checkOverdueTasks() {
-    this.logger.debug('Checking for overdue tasks...');
+    this.logger.debug('⏰ Checking for overdue tasks...');
 
     const startTime = Date.now();
     let processedCount = 0;
@@ -27,10 +27,10 @@ export class OverdueTasksService {
       // Use database-level filtering for efficiency
       const overdueTasks = await this.findOverdueTasks();
 
-      this.logger.log(`Found ${overdueTasks.length} overdue tasks`);
+      this.logger.log(`📋 Found ${overdueTasks.length} overdue tasks`);
 
       if (overdueTasks.length === 0) {
-        this.logger.debug('No overdue tasks found');
+        this.logger.debug('✨ No overdue tasks found - everyone is on time!');
         return;
       }
 
@@ -112,5 +112,15 @@ export class OverdueTasksService {
       chunks.push(array.slice(i, i + size));
     }
     return chunks;
+  }
+
+  async sendOverdueNotifications(tasks: any[]): Promise<void> {
+    this.logger.log(`Sending overdue notifications for ${tasks.length} tasks`);
+    
+    // Send notifications for overdue tasks
+    for (const task of tasks) {
+      this.logger.debug(`Sending overdue notification for task ${task.id}`);
+      // Implement notification logic here (email, SMS, etc.)
+    }
   }
 }

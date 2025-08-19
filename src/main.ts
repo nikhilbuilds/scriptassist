@@ -6,7 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Global validation pipe
+  // Global validation pipe - catches bad data before it gets to our controllers
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -18,10 +18,10 @@ async function bootstrap() {
     }),
   );
 
-  // CORS
+  // CORS - allow frontend to talk to us
   app.enableCors();
 
-  // Swagger documentation
+  // Swagger documentation - for API testing and docs
   const config = new DocumentBuilder()
     .setTitle('TaskFlow API')
     .setDescription('Task Management System API')
@@ -33,7 +33,14 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
-  console.log(`Application running on: http://localhost:${port}`);
-  console.log(`Swagger documentation: http://localhost:${port}/api`);
+  
+  console.log(`🚀 Server is running on: http://localhost:${port}`);
+  console.log(`📚 API docs available at: http://localhost:${port}/api`);
+  console.log(`💡 Health check: http://localhost:${port}/health`);
 }
-bootstrap();
+
+// Start the app
+bootstrap().catch((error) => {
+  console.error('💥 Failed to start server:', error);
+  process.exit(1);
+});

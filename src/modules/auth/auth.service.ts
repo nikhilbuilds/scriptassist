@@ -17,27 +17,30 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
+    // Find the user
     const user = await this.usersService.findByEmail(email);
-
     if (!user) {
-      throw new UnauthorizedException('Invalid email');
+      throw new UnauthorizedException('No account found with that email');
     }
 
-    const passwordValid = await bcrypt.compare(password, user.password);
-
-    if (!passwordValid) {
-      throw new UnauthorizedException('Invalid password');
+    // Check password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Wrong password - try again');
     }
 
-    const payload = {
+    // Generate tokens
+    const tokenPayload = {
       sub: user.id,
       email: user.email,
       role: user.role,
     };
 
-    const accessToken = this.jwtService.sign(payload, {
+    const accessToken = this.jwtService.sign(tokenPayload, {
       expiresIn: JWT_CONSTANTS.ACCESS_TOKEN_EXPIRES_IN,
     });
+    
+    // Generate refresh token
     const refreshToken = await this.generateRefreshToken(user.id);
 
     return {
@@ -52,30 +55,32 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto) {
+    // Check if user already exists
     const existingUser = await this.usersService.findByEmail(registerDto.email);
-
     if (existingUser) {
-      throw new UnauthorizedException('Email already exists');
+      throw new UnauthorizedException('Someone already has that email address');
     }
 
-    const user = await this.usersService.create(registerDto);
+    // Create the new user
+    const newUser = await this.usersService.create(registerDto);
 
+    // Generate tokens for immediate login
     const accessToken = this.jwtService.sign(
-      { sub: user.id },
+      { sub: newUser.id },
       {
         expiresIn: JWT_CONSTANTS.ACCESS_TOKEN_EXPIRES_IN,
       },
     );
-    const refreshToken = await this.generateRefreshToken(user.id);
+    const refreshToken = await this.generateRefreshToken(newUser.id);
 
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role,
       },
     };
   }

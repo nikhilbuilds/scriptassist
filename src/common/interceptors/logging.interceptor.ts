@@ -69,7 +69,8 @@ export class LoggingInterceptor implements NestInterceptor {
       body: this.sanitizeBody(request.body),
     };
 
-    this.logger.log(`Incoming ${context.method} request to ${context.url}`, logData);
+    // Log incoming requests - useful for debugging and monitoring
+    this.logger.log(`📥 ${context.method} ${context.url}`, logData);
   }
 
   private logSuccessfulResponse(context: LogContext, response: Response, data: any): void {
@@ -91,9 +92,9 @@ export class LoggingInterceptor implements NestInterceptor {
 
     // Use different log levels based on status code
     if (statusCode >= 400) {
-      this.logger.warn(`Response for ${context.method} ${context.url}`, logData);
+      this.logger.warn(`⚠️  ${context.method} ${context.url} (${statusCode})`, logData);
     } else {
-      this.logger.log(`Response for ${context.method} ${context.url}`, logData);
+      this.logger.log(`✅ ${context.method} ${context.url} (${statusCode})`, logData);
     }
   }
 
@@ -119,7 +120,7 @@ export class LoggingInterceptor implements NestInterceptor {
       },
     };
 
-    this.logger.error(`Error in ${context.method} ${context.url}`, logData);
+    this.logger.error(`💥 Error in ${context.method} ${context.url}`, logData);
   }
 
   private getClientIp(request: Request): string {

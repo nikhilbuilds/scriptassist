@@ -49,6 +49,7 @@ export class TasksController {
   @ApiResponse({ status: 429, description: 'Too many task creation requests' })
   create(@Body() createTaskDto: CreateTaskDto, @CurrentUser() user: { id: string }) {
     // Automatically use the user ID from JWT token
+    // This way users can't create tasks for other people
     const taskWithUserId = {
       ...createTaskDto,
       userId: user.id, // Add user ID from JWT token
@@ -82,6 +83,7 @@ export class TasksController {
     @Query('limit') limit?: string,
     @CurrentUser() user?: { id: string },
   ) {
+    // Apply filters if provided
     return this.tasksService.findAll({
       status,
       priority,
@@ -109,7 +111,7 @@ export class TasksController {
     const task = await this.tasksService.findOne(id);
 
     if (!task) {
-      throw new HttpException('Task not found', HttpStatus.NOT_FOUND);
+      throw new HttpException('Couldn\'t find that task - maybe it was deleted?', HttpStatus.NOT_FOUND);
     }
 
     return task;

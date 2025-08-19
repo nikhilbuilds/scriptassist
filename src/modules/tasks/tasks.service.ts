@@ -13,35 +13,41 @@ import { TaskPriority } from './enums/task-priority.enum';
 @Injectable()
 export class TasksService {
   private readonly logger = new Logger(TasksService.name);
+  
   constructor(
     @InjectRepository(Task)
-    private tasksRepository: Repository<Task>,
+    private taskRepo: Repository<Task>, // Shorter name, more casual
     @InjectQueue('task-processing')
     private taskQueue: Queue,
   ) {}
 
   async create(createTaskDto: CreateTaskDto): Promise<Task> {
     // Validate and convert dueDate if provided
+    
     if (createTaskDto.dueDate) {
       const dueDate = new Date(createTaskDto.dueDate);
       if (isNaN(dueDate.getTime())) {
-        throw new BadRequestException(
-          'Invalid dueDate format. Please provide a valid date string.',
-        );
+        throw new BadRequestException('That date looks wrong - can you check it?');
       }
+      
       // Convert to Date object for the entity
       createTaskDto.dueDate = dueDate as Date;
     }
 
-    // Create task with proper validation
-    const task = this.tasksRepository.create(createTaskDto);
-    const savedTask = await this.tasksRepository.save(task);
+    // Create the task
+    const newTask = this.taskRepo.create(createTaskDto);
+    const savedTask = await this.taskRepo.save(newTask);
 
-    // Add to queue for background processing
-    this.taskQueue.add('task-status-update', {
-      taskId: savedTask.id,
-      status: savedTask.status,
-    });
+    // Add to background queue for processing
+    // Add to background queue for processing
+    try {
+      await this.taskQueue.add('task-status-update', {
+        taskId: savedTask.id,
+        status: savedTask.status,
+      });
+    } catch (error) {
+      this.logger.warn('⚠️  Queue failed, but task was created:', error instanceof Error ? error.message : 'Unknown error');
+    }
 
     return savedTask;
   }
@@ -71,25 +77,25 @@ export class TasksService {
     const limit = Math.max(1, Math.min(100, parseInt(String(rawLimit), 10) || 10));
 
     // Build query builder for efficient database-level filtering
-    const queryBuilder = this.tasksRepository
+    const taskQuery = this.taskRepo
       .createQueryBuilder('task')
       .leftJoinAndSelect('task.user', 'user');
 
     // Apply filters at database level
     if (status) {
-      queryBuilder.andWhere('task.status = :status', { status });
+      taskQuery.andWhere('task.status = :status', { status });
     }
 
     if (priority) {
-      queryBuilder.andWhere('task.priority = :priority', { priority });
+      taskQuery.andWhere('task.priority = :priority', { priority });
     }
 
     if (userId) {
-      queryBuilder.andWhere('task.userId = :userId', { userId });
+      taskQuery.andWhere('task.userId = :userId', { userId });
     }
 
     if (search) {
-      queryBuilder.andWhere('(task.title ILIKE :search OR task.description ILIKE :search)', {
+      taskQuery.andWhere('(task.title ILIKE :search OR task.description ILIKE :search)', {
         search: `%${search}%`,
       });
     }
@@ -97,14 +103,14 @@ export class TasksService {
     // Apply sorting
     const validSortFields = ['title', 'status', 'priority', 'dueDate', 'createdAt', 'updatedAt'];
     const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
-    queryBuilder.orderBy(`task.${sortField}`, sortOrder as 'ASC' | 'DESC');
+    taskQuery.orderBy(`task.${sortField}`, sortOrder as 'ASC' | 'DESC');
 
     // Apply pagination
     const skip = Math.max(0, (page - 1) * limit);
-    queryBuilder.skip(skip).take(limit);
+    taskQuery.skip(skip).take(limit);
 
     // Execute query with count
-    const [data, total] = await queryBuilder.getManyAndCount();
+    const [data, total] = await taskQuery.getManyAndCount();
 
     const totalPages = Math.ceil(total / limit);
     const hasNext = page < totalPages;
@@ -122,7 +128,7 @@ export class TasksService {
   }
 
   async findOne(id: string): Promise<Task> {
-    const task = await this.tasksRepository.findOne({
+    const task = await this.taskRepo.findOne({
       where: { id },
       relations: ['user'],
     });
@@ -136,7 +142,7 @@ export class TasksService {
 
   async update(id: string, updateTaskDto: UpdateTaskDto): Promise<Task> {
     // Efficient implementation: Single database call with proper validation
-    const queryRunner = this.tasksRepository.manager.connection.createQueryRunner();
+    const queryRunner = this.taskRepo.manager.connection.createQueryRunner();
     
     try {
       await queryRunner.connect();
@@ -209,7 +215,7 @@ export class TasksService {
 
   async remove(id: string): Promise<void> {
     // Efficient implementation: Single database call with proper error handling
-    const result = await this.tasksRepository.delete(id);
+    const result = await this.taskRepo.delete(id);
     
     if (result.affected === 0) {
       throw new NotFoundException('Task not found');
@@ -218,7 +224,7 @@ export class TasksService {
 
   async findByStatus(status: TaskStatus): Promise<Task[]> {
     // Efficient implementation: Using TypeORM repository patterns
-    return this.tasksRepository.find({
+    return this.taskRepo.find({
       where: { status },
       relations: ['user'],
       order: { createdAt: 'DESC' },
@@ -229,18 +235,18 @@ export class TasksService {
     // This method will be called by the task processor
     const task = await this.findOne(id);
     task.status = status as any;
-    return this.tasksRepository.save(task);
+    return this.taskRepo.save(task);
   }
 
   async getStats(): Promise<ITaskStats> {
     // Efficient approach: Use TypeORM count for aggregation
-    const total = await this.tasksRepository.count();
-    const completed = await this.tasksRepository.count({ where: { status: TaskStatus.COMPLETED } });
-    const inProgress = await this.tasksRepository.count({
+    const total = await this.taskRepo.count();
+    const completed = await this.taskRepo.count({ where: { status: TaskStatus.COMPLETED } });
+    const inProgress = await this.taskRepo.count({
       where: { status: TaskStatus.IN_PROGRESS },
     });
-    const pending = await this.tasksRepository.count({ where: { status: TaskStatus.PENDING } });
-    const highPriority = await this.tasksRepository.count({
+    const pending = await this.taskRepo.count({ where: { status: TaskStatus.PENDING } });
+    const highPriority = await this.taskRepo.count({
       where: { priority: TaskPriority.HIGH },
     });
 

@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Task } from '../../tasks/entities/task.entity';
+
 import { Exclude } from 'class-transformer';
 
 @Entity('users')
@@ -28,7 +28,7 @@ export class User {
   role: string;
 
   @OneToMany('Task', 'user')
-  tasks: Task[];
+  tasks: any[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
