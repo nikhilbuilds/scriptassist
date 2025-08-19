@@ -1,23 +1,28 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
+import { RedisRateLimitGuard } from './common/guards/redis-rate-limit.guard';
 import { UsersModule } from './modules/users/users.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TaskProcessorModule } from './queues/task-processor/task-processor.module';
 import { ScheduledTasksModule } from './queues/scheduled-tasks/scheduled-tasks.module';
 import { CacheService } from './common/services/cache.service';
+import { SimpleObservabilityModule } from './common/modules/simple-observability.module';
+import { RateLimiterModule } from './common/modules/rate-limiter.module';
+import rateLimiterConfig from './config/rate-limiter.config';
 
 @Module({
   imports: [
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
+      load: [rateLimiterConfig],
     }),
-    
+
     // Database
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -34,10 +39,10 @@ import { CacheService } from './common/services/cache.service';
         logging: configService.get('NODE_ENV') === 'development',
       }),
     }),
-    
+
     // Scheduling
     ScheduleModule.forRoot(),
-    
+
     // Queue
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -49,37 +54,34 @@ import { CacheService } from './common/services/cache.service';
         },
       }),
     }),
-    
-    // Rate limiting
-    ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ([
-        {
-          ttl: 60,
-          limit: 10,
-        },
-      ]),
-    }),
-    
+
+    // Rate Limiter Module
+    RateLimiterModule,
+
     // Feature modules
     UsersModule,
     TasksModule,
     AuthModule,
-    
+
     // Queue processing modules
     TaskProcessorModule,
     ScheduledTasksModule,
+    SimpleObservabilityModule,
   ],
   providers: [
-    // Inefficient: Global cache service with no configuration options
-    // This creates a single in-memory cache instance shared across all modules
-    CacheService
+    // Global rate limiter guard
+    {
+      provide: APP_GUARD,
+      useClass: RedisRateLimitGuard,
+    },
+    // Efficient: Global cache service with proper configuration
+    // This creates a configured cache instance with memory limits and LRU eviction
+    CacheService,
   ],
   exports: [
     // Exporting the cache service makes it available to other modules
-    // but creates tight coupling
-    CacheService
-  ]
+    // with proper dependency injection and configuration
+    CacheService,
+  ],
 })
-export class AppModule {} 
+export class AppModule {}
