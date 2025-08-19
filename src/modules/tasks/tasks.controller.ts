@@ -46,6 +46,9 @@ export class TasksController {
   @Get()
   @ApiOperation({ summary: 'Find all tasks with optional filtering' })
   async findAll(@Req() request: Request, @Query() taskFilterDto: TaskFilterDto) {
+    if ((request.user as User).role === 'user') {
+      taskFilterDto.userId = (request.user as User).id;
+    }
     const { tasks, metaData } = await this.tasksService.findAll(taskFilterDto);
     return {
       data: tasks,
