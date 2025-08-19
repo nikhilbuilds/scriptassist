@@ -1,11 +1,59 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { TaskStatus } from '../enums/task-status.enum';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString, IsDateString, IsUUID } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { TaskPriority } from '../enums/task-priority.enum';
+import { TaskStatus } from '../enums/task-status.enum';
+import { PaginationDto } from '@common/dto/pagination.dto';
 
-// TODO: Implement task filtering DTO
-// This DTO should be used to filter tasks by status, priority, etc.
-export class TaskFilterDto {
-  // TODO: Add properties for filtering tasks
-  // Example: status, priority, userId, search query, date ranges, etc.
-  // Add appropriate decorators for validation and Swagger documentation
-} 
+export class TaskFilterDto extends PaginationDto {
+  @ApiPropertyOptional({
+    description: 'User id of the task owner',
+  })
+  @IsUUID()
+  @IsOptional()
+  userId?: string;
+
+  @ApiPropertyOptional({
+    enum: TaskStatus,
+    description: 'Filter tasks by their status.',
+  })
+  @IsEnum(TaskStatus)
+  @IsOptional()
+  status?: TaskStatus;
+
+  @ApiPropertyOptional({
+    enum: TaskPriority,
+    description: 'Filter tasks by their priority.',
+  })
+  @IsEnum(TaskPriority)
+  @IsOptional()
+  priority?: TaskPriority;
+
+  @ApiPropertyOptional({
+    description: 'Search tasks by a keyword in their title or description.',
+    example: 'review',
+  })
+  @IsString()
+  @IsOptional()
+  search?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter tasks created on or after this date.',
+    example: '2025-08-16',
+  })
+  @IsDateString()
+  @IsOptional()
+  @Type(() => Date)
+  @Transform(({ value }) => (value ? new Date(value) : undefined))
+  startDate?: Date;
+
+  @ApiPropertyOptional({
+    description: 'Filter tasks created on or before this date.',
+    example: '2025-08-18',
+  })
+  @IsDateString()
+  @IsOptional()
+  @Type(() => Date)
+  @Transform(({ value }) => (value ? new Date(value) : undefined))
+  endDate?: Date;
+}

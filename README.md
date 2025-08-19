@@ -252,3 +252,90 @@ The API should expose the following endpoints:
 - `POST /tasks/batch` - Batch operations on tasks
 
 Good luck! This challenge is designed to test the skills of experienced engineers in creating scalable, maintainable, and secure systems.
+
+# List of Updates.
+
+## 1. Formatting.
+
+### Prettier was emitting several lint errors which were resolved. This is important since consistent styling is improtant for a large codebase as it enhances readability and maintainability.
+
+## 2. Blocking Error Fix - 
+
+### ERROR [ExceptionHandler] Nest can't resolve dependencies of the OverdueTasksService (BullQueue_task-processing, ?). Please make sure that the argument "TaskRepository" at index [1] is available in the ScheduledTasksModule context. The following error was blocking initial updates - 
+
+### The fix - Remove tight coupling, OverdueTasksService should not call TaskRespository. It should only call TasksService. A refactor was performed as well.
+
+## 3. Blocking Error Fix - 
+
+### ERROR RROR [ExceptionHandler] JwtStrategy requires a secret or key
+### TypeError: JwtStrategy requires a secret or key - 
+
+### The fix - Wrong env key . Changed from jwt.secret to JWT_SECRET
+
+# Performance & Scalability Issues
+
+## 4. N+1 Query Problem -
+
+### Addressed the N+1 Query problem with batchProcess in the tasks.cotroller. Solution was to refactor the code in the controller to the task service and use bulk updates and delete operations to improve performace and scalability. Also error handling is consistent and readability has improved.
+
+## 5. Inefficient in-memory filtering and pagination that won't scale -
+
+### Addressed the In Memory filtering and pagination issue, updated both the tasks and the users controller to have effiecient db side pagination and filtering. Also added DTO for better code quality.
+
+## 6. Collecting Stats, ineffiecient Implementation -
+
+### Convert inefficient db call and in memory count to an aggregate with type orm sql builder. 
+
+## 7. Excessive database roundtrips in batch operations -
+
+### Tradeoff, The number of repeated db calls are reduced, but a tradeoff for update and delete, it does not return the entity in the response.
+
+## 8. Poorly optimized data access patterns -
+
+### Services in the tasks service were optimized and paginated as well. Even if this is used in async processing, the data can be chuncked and sent for processing in the queues.
+
+# Security Vulnerabilities
+
+## 9. Inadequate authentication mechanism with several vulnerabilities
+
+### Implement Refresh Token and update JWT Guards. - Reduce jwt token verification to 12 hours and add refresh token which has a 7 day expiration.
+
+## 10. Improper authorization checks that can be bypassed
+
+### Add Role Gaurds and verify object level access.
+
+## 11. Unprotected sensitive data exposure in error responses
+
+### Clean error responses for any sensitive data
+
+## 12. Improve rate limiting mechanism
+
+### Made rate limiting more secure and performant. Replaced in - memory cache with redis and updated the rate limiting mechnism to leverage redis's expire functionlity to store the count. This makes the rate-limiting a lot faster. Ip addresses are hashed so no secure info is stored in redis.
+
+## 13. Ineffective error handling strategies
+
+### Updated the logger to display error messages with clear contextual information and response times and sizes are logged as well.
+
+## 14. Missing retry mechanisms for distributed operations, improved error handling for scheduled tasks and queues.
+
+### Update bull mq with retries and added batching and improved error handling.
+
+## 15. Add appropriate indexing strategies
+
+### Indexes were added to various fields in the task entity.
+
+## 16. Add Transaction Management capability
+
+### typeorm-transactional - implemented with decorator to allow any service to run inside of a transaction.
+
+## 17. Health Checks, Implement one observability pattern
+
+### Created health checks to test the db, redis, api server and queues. These checks along with the logger interceptor improve system observability.
+
+
+# End Note - 
+
+## Additional Updates
+
+### Common service to paginate a repositories response.
+### Improved authentication - Create a session table to invalidate old access tokens on refresh. Manage multiple logins of the same user.

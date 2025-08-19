@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindManyOptions, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
+import { PaginationDto } from '@common/dto/pagination.dto';
+import { PaginationMetaData } from '../../types/pagination.interface';
 
 @Injectable()
 export class UsersService {
@@ -22,35 +24,61 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  findAll(): Promise<User[]> {
-    return this.usersRepository.find();
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<{ users: User[]; metaData: PaginationMetaData }> {
+    const findOptions: FindManyOptions<User> = {
+      skip: (paginationDto.page - 1) * paginationDto.limit,
+      take: paginationDto.limit,
+    };
+
+    if (paginationDto.sortBy) {
+      findOptions.order = { [paginationDto.sortBy]: paginationDto.sortOrder ?? 'ASC' };
+    }
+
+    const dbResponse = await this.usersRepository.findAndCount({
+      skip: (paginationDto.page - 1) * paginationDto.limit,
+      take: paginationDto.limit,
+    });
+
+    return {
+      users: dbResponse[0],
+      metaData: {
+        total: dbResponse[1],
+        page: paginationDto.page,
+        limit: paginationDto.limit,
+        totalPages: Math.ceil(dbResponse[1] / paginationDto.limit),
+      },
+    };
   }
 
-  async findOne(id: string): Promise<User> {
-    const user = await this.usersRepository.findOne({ where: { id } });
-    if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-    return user;
+  async findOne(id: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { id } });
   }
 
   async findByEmail(email: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { email } });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    const user = await this.findOne(id);
-    
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<{ message: string }> {
     if (updateUserDto.password) {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
     }
-    
-    this.usersRepository.merge(user, updateUserDto);
-    return this.usersRepository.save(user);
+    const updateResult = await this.usersRepository.update(id, { ...updateUserDto });
+    if ((updateResult.affected ?? 0) > 0) {
+      return { message: 'User updated successfully' };
+    } else {
+      throw new NotFoundException(`User not found`);
+    }
   }
 
-  async remove(id: string): Promise<void> {
-    const user = await this.findOne(id);
-    await this.usersRepository.remove(user);
+  async remove(id: string): Promise<{ message: string }> {
+    const deleteResult = await this.usersRepository.delete(id);
+
+    if ((deleteResult.affected ?? 0) === 0) {
+      throw new NotFoundException(`User not found`);
+    }
+
+    return { message: 'User deleted successfully' };
   }
-} 
+}

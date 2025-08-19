@@ -1,6 +1,14 @@
-import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { Task } from '../../tasks/entities/task.entity';
 import { Exclude } from 'class-transformer';
+import { Role } from '../enums/role.enum';
 
 @Entity('users')
 export class User {
@@ -17,10 +25,14 @@ export class User {
   @Exclude({ toPlainOnly: true })
   password: string;
 
-  @Column({ default: 'user' })
+  @Column({
+    type: 'enum',
+    enum: Role,
+    default: Role.USER,
+  })
   role: string;
 
-  @OneToMany(() => Task, (task) => task.user)
+  @OneToMany(() => Task, task => task.user)
   tasks: Task[];
 
   @CreateDateColumn({ name: 'created_at' })
@@ -28,4 +40,4 @@ export class User {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
-} 
+}
