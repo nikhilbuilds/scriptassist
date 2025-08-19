@@ -257,7 +257,7 @@ Good luck! This challenge is designed to test the skills of experienced engineer
 
 ## 1. Formatting.
 
-### Prettier was emitting several lint errors which were resolved in this commit <add commit here> . This is important since consistent styling is improtant for a large codebase as it enhances readability and maintainability.
+### Prettier was emitting several lint errors which were resolved. This is important since consistent styling is improtant for a large codebase as it enhances readability and maintainability.
 
 ## 2. Blocking Error Fix - 
 
@@ -280,7 +280,7 @@ Good luck! This challenge is designed to test the skills of experienced engineer
 
 ## 5. Inefficient in-memory filtering and pagination that won't scale -
 
-### Addressed the In Memory filtering and pagination issue, updated both the tasks and the users controller, to have effiecient db side pagination and filtering. Also addewd DTO for better code quality.
+### Addressed the In Memory filtering and pagination issue, updated both the tasks and the users controller to have effiecient db side pagination and filtering. Also added DTO for better code quality.
 
 ## 6. Collecting Stats, ineffiecient Implementation -
 
@@ -288,11 +288,11 @@ Good luck! This challenge is designed to test the skills of experienced engineer
 
 ## 7. Excessive database roundtrips in batch operations -
 
-### Tradeoff, The number of repeated db calls are reduced but for update and delete it does not return the entity in the response.
+### Tradeoff, The number of repeated db calls are reduced, but a tradeoff for update and delete, it does not return the entity in the response.
 
 ## 8. Poorly optimized data access patterns -
 
-### Services in the tasks service were optimized and paginated as well. Even if this is used in queues the data can be chuncked and sent for processing in the queues.
+### Services in the tasks service were optimized and paginated as well. Even if this is used in async processing, the data can be chuncked and sent for processing in the queues.
 
 # Security Vulnerabilities
 
@@ -310,19 +310,19 @@ Good luck! This challenge is designed to test the skills of experienced engineer
 
 ## 12. Improve rate limiting mechanism
 
-### Made rate limiting more secure and performant. Replaced in - memory cache with redis and updated the rale limiting mechnism to leverage redis's expire functionlity to store the count. This makes the ratelimiting a lot faster. Ip addresses are hashed so no secure info is stored in redis.
+### Made rate limiting more secure and performant. Replaced in - memory cache with redis and updated the rate limiting mechnism to leverage redis's expire functionlity to store the count. This makes the rate-limiting a lot faster. Ip addresses are hashed so no secure info is stored in redis.
 
 ## 13. Ineffective error handling strategies
 
-### Updated the logger to display error messages with clear contextual information and response times are logged as well.
+### Updated the logger to display error messages with clear contextual information and response times and sizes are logged as well.
 
 ## 14. Missing retry mechanisms for distributed operations, improved error handling for scheduled tasks and queues.
 
-### Update bull mq with reties and added batching and improved error handling.
+### Update bull mq with retries and added batching and improved error handling.
 
 ## 15. Add appropriate indexing strategies
 
-### Indexes were added to various fileds in the task entity.
+### Indexes were added to various fields in the task entity.
 
 ## 16. Add Transaction Management capability
 
@@ -331,9 +331,6 @@ Good luck! This challenge is designed to test the skills of experienced engineer
 ## 17. Health Checks, Implement one observability pattern
 
 ### Created health checks to test the db, redis, api server and queues. These checks along with the logger interceptor improve system observability.
-
-
-
 
 
 # End Note - 
