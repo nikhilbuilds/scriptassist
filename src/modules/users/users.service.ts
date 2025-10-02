@@ -1,56 +1,73 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { NotFoundException, ConflictException, Inject } from '@nestjs/common';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { IUsersRepository, USERS_REPOSITORY } from './users.repository.interface';
 import * as bcrypt from 'bcrypt';
 
-@Injectable()
 export class UsersService {
   constructor(
-    @InjectRepository(User)
-    private usersRepository: Repository<User>,
+    @Inject(USERS_REPOSITORY)
+    private readonly usersRepository: IUsersRepository,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
+    const existingUser = await this.usersRepository.findByEmail(createUserDto.email);
+    if (existingUser) {
+      throw new ConflictException(`User with email ${createUserDto.email} already exists`);
+    }
+
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-    const user = this.usersRepository.create({
+
+    const user = await this.usersRepository.create({
       ...createUserDto,
       password: hashedPassword,
     });
-    return this.usersRepository.save(user);
+
+    return user;
   }
 
-  findAll(): Promise<User[]> {
-    return this.usersRepository.find();
+  async findAll(): Promise<User[]> {
+    return this.usersRepository.findAll();
   }
 
   async findOne(id: string): Promise<User> {
-    const user = await this.usersRepository.findOne({ where: { id } });
+    const user = await this.usersRepository.findById(id);
+
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
+
     return user;
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { email } });
+    return this.usersRepository.findByEmail(email);
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    const user = await this.findOne(id);
-    
+    const existingUser = await this.findOne(id);
+
+    const updateData: Partial<User> = { ...updateUserDto };
     if (updateUserDto.password) {
-      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+      updateData.password = await bcrypt.hash(updateUserDto.password, 10);
     }
-    
-    this.usersRepository.merge(user, updateUserDto);
-    return this.usersRepository.save(user);
+
+    if (updateUserDto.email && updateUserDto.email !== existingUser.email) {
+      const emailExists = await this.usersRepository.findByEmail(updateUserDto.email);
+      if (emailExists) {
+        throw new ConflictException(`User with email ${updateUserDto.email} already exists`);
+      }
+    }
+
+    return this.usersRepository.update(id, updateData);
   }
 
   async remove(id: string): Promise<void> {
-    const user = await this.findOne(id);
-    await this.usersRepository.remove(user);
+    await this.findOne(id);
+
+    await this.usersRepository.delete(id);
+
+    //TODO: Add return statement
   }
-} 
+}
