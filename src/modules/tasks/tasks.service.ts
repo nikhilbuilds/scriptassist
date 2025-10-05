@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, Logger } from '@nestjs/common';
 import { Task } from './entities/task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -15,6 +15,7 @@ import {
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
   constructor(
     @Inject(TASKS_REPOSITORY)
     private readonly tasksRepository: ITasksRepository,
@@ -157,6 +158,52 @@ export class TasksService {
       pending: userTasks.filter(t => t.status === TaskStatus.PENDING).length,
       highPriority: userTasks.filter(t => t.priority === TaskPriority.HIGH).length,
     };
+  }
+
+  async queueBulkCreate(createTasksDto: CreateTaskDto[], currentUserId: string) {
+    this.logger.log(
+      `Queueing bulk creation of ${createTasksDto.length} tasks for user ${currentUserId}`,
+    );
+
+    return this.taskQueue.add(
+      'tasks-bulk-create',
+      {
+        tasks: createTasksDto,
+        userId: currentUserId,
+        queuedAt: new Date().toISOString(),
+      },
+      {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
+  }
+
+  async queueBulkDelete(taskIds: string[], currentUserId: string) {
+    this.logger.log(`Queueing bulk deletion of ${taskIds.length} tasks for user ${currentUserId}`);
+
+    return this.taskQueue.add(
+      'tasks-bulk-delete',
+      {
+        taskIds,
+        userId: currentUserId,
+        queuedAt: new Date().toISOString(),
+      },
+      {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
   }
 }
 //TODO: RBAC

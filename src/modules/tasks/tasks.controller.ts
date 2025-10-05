@@ -112,6 +112,22 @@ export class TasksController {
     };
   }
 
+  @Delete('batch/async')
+  @ApiOperation({ summary: 'Batch delete multiple tasks asynchronously via queue' })
+  async batchDeleteAsync(
+    @Body() batchDeleteDto: BatchDeleteTasksDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    const job = await this.tasksService.queueBulkDelete(batchDeleteDto.taskIds, user.id);
+
+    return {
+      message: 'Tasks queued for deletion',
+      jobId: job.id,
+      taskCount: batchDeleteDto.taskIds.length,
+      status: 'queued',
+    };
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a task (only if it belongs to current user)' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: { id: string }) {
@@ -131,6 +147,22 @@ export class TasksController {
       message: `${result.createdCount} tasks created successfully`,
       createdCount: result.createdCount,
       tasks: result.tasks,
+    };
+  }
+
+  @Post('batch/async')
+  @ApiOperation({ summary: 'Batch create multiple tasks asynchronously via queue' })
+  async batchCreateAsync(
+    @Body() batchCreateDto: BatchCreateTasksDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    const job = await this.tasksService.queueBulkCreate(batchCreateDto.tasks, user.id);
+
+    return {
+      message: 'Tasks queued for creation',
+      jobId: job.id,
+      taskCount: batchCreateDto.tasks.length,
+      status: 'queued',
     };
   }
 }
