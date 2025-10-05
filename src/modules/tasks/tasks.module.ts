@@ -4,6 +4,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { TasksService } from './tasks.service';
 import { TasksController } from './tasks.controller';
 import { Task } from './entities/task.entity';
+import { TasksRepository } from './tasks.repository';
+import { TASKS_REPOSITORY } from './tasks.repository.interface';
 
 @Module({
   imports: [
@@ -13,7 +15,13 @@ import { Task } from './entities/task.entity';
     }),
   ],
   controllers: [TasksController],
-  providers: [TasksService],
+  providers: [
+    TasksService,
+    {
+      provide: TASKS_REPOSITORY,
+      useClass: TasksRepository,
+    },
+  ],
   exports: [TasksService],
 })
-export class TasksModule {} 
+export class TasksModule {}

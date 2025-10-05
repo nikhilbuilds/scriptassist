@@ -1,11 +1,19 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { TaskStatus } from '../enums/task-status.enum';
 import { TaskPriority } from '../enums/task-priority.enum';
 
 @Entity('tasks')
 export class Task {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn('uuid') //index
   id: string;
 
   @Column()
@@ -19,14 +27,14 @@ export class Task {
     enum: TaskStatus,
     default: TaskStatus.PENDING,
   })
-  status: TaskStatus;
+  status: TaskStatus; //index
 
   @Column({
     type: 'enum',
     enum: TaskPriority,
     default: TaskPriority.MEDIUM,
   })
-  priority: TaskPriority;
+  priority: TaskPriority; //index
 
   @Column({ name: 'due_date', nullable: true })
   dueDate: Date;
@@ -34,7 +42,7 @@ export class Task {
   @Column({ name: 'user_id' })
   userId: string;
 
-  @ManyToOne(() => User, (user) => user.tasks)
+  @ManyToOne(() => User, user => user.tasks)
   @JoinColumn({ name: 'user_id' })
   user: User;
 
@@ -43,4 +51,4 @@ export class Task {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
-} 
+}
