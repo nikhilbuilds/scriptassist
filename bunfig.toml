@@ -2,4 +2,6 @@
 exact = true
 
 [test]
-coverage = true 
+coverage = true
+coverageDir = "./coverage"
+preload = ["./test/jest-setup.ts"]

@@ -6,12 +6,22 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { TaskStatus } from './enums/task-status.enum';
 import { TaskPriority } from './enums/task-priority.enum';
+import { UserRole } from '../users/enum/user-role.enum';
+import type { AuthUser } from '../../common/types';
+import type { ITasksRepository } from './tasks.repository.interface';
 import {
-  ITasksRepository,
   TASKS_REPOSITORY,
   TaskFilterOptions,
   PaginationOptions,
 } from './tasks.repository.interface';
+
+interface TaskQueryOptions {
+  withRelations?: boolean;
+}
+
+interface TaskUpdateOptions {
+  notifyOnStatusChange?: boolean;
+}
 
 @Injectable()
 export class TasksService {
@@ -23,10 +33,14 @@ export class TasksService {
     private readonly taskQueue: Queue,
   ) {}
 
-  async create(createTaskDto: CreateTaskDto, currentUserId: string): Promise<Task> {
+  private isAdminOrSuperAdmin(role: string): boolean {
+    return role === UserRole.SUPER_ADMIN || role === UserRole.ADMIN;
+  }
+
+  async create(createTaskDto: CreateTaskDto, currentUser: AuthUser): Promise<Task> {
     const taskData = {
       ...createTaskDto,
-      userId: currentUserId,
+      userId: currentUser.id,
     };
 
     const task = await this.tasksRepository.create(taskData);
@@ -40,27 +54,44 @@ export class TasksService {
     return task;
   }
 
-  async findAllForUser(currentUserId: string, withRelations: boolean = true): Promise<Task[]> {
-    return this.tasksRepository.findByUserId(currentUserId);
+  async findAllForUser(currentUser: AuthUser, options: TaskQueryOptions = {}): Promise<Task[]> {
+    const { withRelations = true } = options;
+
+    // Super-admin and admin can see all tasks
+    if (this.isAdminOrSuperAdmin(currentUser.role)) {
+      return this.tasksRepository.findAll(withRelations);
+    }
+    // Regular users see only their own tasks
+    return this.tasksRepository.findByUserId(currentUser.id);
   }
 
   async findWithFiltersForUser(
-    currentUserId: string,
+    currentUser: AuthUser,
     filters: TaskFilterOptions,
-    pagination?: PaginationOptions,
+    options: { pagination?: PaginationOptions } = {},
   ) {
-    const userFilters = { ...filters, userId: currentUserId };
+    const { pagination } = options;
+
+    // Super-admin and admin can see all tasks with filters
+    if (this.isAdminOrSuperAdmin(currentUser.role)) {
+      return this.tasksRepository.findWithFilters(filters, pagination);
+    }
+    // Regular users see only their own tasks with filters
+    const userFilters = { ...filters, userId: currentUser.id };
     return this.tasksRepository.findWithFilters(userFilters, pagination);
   }
 
-  async findOne(id: string, currentUserId: string, withRelations: boolean = true): Promise<Task> {
+  async findOne(id: string, currentUser: AuthUser, options: TaskQueryOptions = {}): Promise<Task> {
+    const { withRelations = true } = options;
+
     const task = await this.tasksRepository.findById(id, withRelations);
 
     if (!task) {
       throw new NotFoundException(`Task with ID ${id} not found`);
     }
 
-    if (task.userId !== currentUserId) {
+    // Super-admin and admin can access any task, regular users only their own
+    if (!this.isAdminOrSuperAdmin(currentUser.role) && task.userId !== currentUser.id) {
       throw new ForbiddenException('You do not have permission to access this task');
     }
 
@@ -72,8 +103,13 @@ export class TasksService {
     return allUserTasks.filter(task => task.status === status);
   }
 
-  async update(id: string, updateTaskDto: UpdateTaskDto, currentUserId: string): Promise<Task> {
-    const existingTask = await this.findOne(id, currentUserId, false);
+  async update(
+    id: string,
+    updateTaskDto: UpdateTaskDto,
+    currentUser: AuthUser,
+    options: TaskUpdateOptions = {},
+  ): Promise<Task> {
+    const existingTask = await this.findOne(id, currentUser, { withRelations: false });
     const originalStatus = existingTask.status;
 
     const { userId, ...updateData } = updateTaskDto;
@@ -98,8 +134,8 @@ export class TasksService {
     return this.tasksRepository.update(id, { status });
   }
 
-  async remove(id: string, currentUserId: string): Promise<void> {
-    await this.findOne(id, currentUserId, false);
+  async remove(id: string, currentUser: AuthUser): Promise<void> {
+    await this.findOne(id, currentUser, { withRelations: false });
 
     //TODO: Soft delete
     //TODO: Notification layer
@@ -108,11 +144,11 @@ export class TasksService {
 
   async batchCreate(
     createTasksDto: CreateTaskDto[],
-    currentUserId: string,
+    currentUser: AuthUser,
   ): Promise<{ tasks: Task[]; createdCount: number }> {
     const tasksData = createTasksDto.map(dto => ({
       ...dto,
-      userId: currentUserId,
+      userId: currentUser.id,
     }));
 
     const createdTasks = await this.tasksRepository.batchCreate(tasksData);
@@ -132,7 +168,7 @@ export class TasksService {
     };
   }
 
-  async batchDeleteForUser(taskIds: string[], currentUserId: string): Promise<number> {
+  async batchDeleteForUser(taskIds: string[], currentUser: AuthUser): Promise<number> {
     const tasks = await Promise.all(taskIds.map(id => this.tasksRepository.findById(id, false)));
 
     const notFoundIds = taskIds.filter((id, index) => !tasks[index]);
@@ -140,36 +176,45 @@ export class TasksService {
       throw new NotFoundException(`Tasks not found: ${notFoundIds.join(', ')}`);
     }
 
-    const unauthorizedTasks = tasks.filter(task => task && task.userId !== currentUserId);
-    if (unauthorizedTasks.length > 0) {
-      throw new ForbiddenException('You do not have permission to delete some of these tasks');
+    // Super-admin and admin can delete any tasks, regular users only their own
+    if (!this.isAdminOrSuperAdmin(currentUser.role)) {
+      const unauthorizedTasks = tasks.filter(task => task && task.userId !== currentUser.id);
+      if (unauthorizedTasks.length > 0) {
+        throw new ForbiddenException('You do not have permission to delete some of these tasks');
+      }
     }
 
     return this.tasksRepository.batchDelete(taskIds);
   }
 
-  async getStatisticsForUser(currentUserId: string) {
-    const userTasks = await this.tasksRepository.findByUserId(currentUserId);
+  async getStatisticsForUser(currentUser: AuthUser) {
+    // Super-admin and admin get global statistics, regular users get their own
+    let tasks: Task[];
+    if (this.isAdminOrSuperAdmin(currentUser.role)) {
+      tasks = await this.tasksRepository.findAll(false);
+    } else {
+      tasks = await this.tasksRepository.findByUserId(currentUser.id);
+    }
 
     return {
-      total: userTasks.length,
-      completed: userTasks.filter(t => t.status === TaskStatus.COMPLETED).length,
-      inProgress: userTasks.filter(t => t.status === TaskStatus.IN_PROGRESS).length,
-      pending: userTasks.filter(t => t.status === TaskStatus.PENDING).length,
-      highPriority: userTasks.filter(t => t.priority === TaskPriority.HIGH).length,
+      total: tasks.length,
+      completed: tasks.filter(t => t.status === TaskStatus.COMPLETED).length,
+      inProgress: tasks.filter(t => t.status === TaskStatus.IN_PROGRESS).length,
+      pending: tasks.filter(t => t.status === TaskStatus.PENDING).length,
+      highPriority: tasks.filter(t => t.priority === TaskPriority.HIGH).length,
     };
   }
 
-  async queueBulkCreate(createTasksDto: CreateTaskDto[], currentUserId: string) {
+  async queueBulkCreate(createTasksDto: CreateTaskDto[], currentUser: AuthUser) {
     this.logger.log(
-      `Queueing bulk creation of ${createTasksDto.length} tasks for user ${currentUserId}`,
+      `Queueing bulk creation of ${createTasksDto.length} tasks for user ${currentUser.id}`,
     );
 
     return this.taskQueue.add(
       'tasks-bulk-create',
       {
         tasks: createTasksDto,
-        userId: currentUserId,
+        userId: currentUser.id,
         queuedAt: new Date().toISOString(),
       },
       {
@@ -184,14 +229,14 @@ export class TasksService {
     );
   }
 
-  async queueBulkDelete(taskIds: string[], currentUserId: string) {
-    this.logger.log(`Queueing bulk deletion of ${taskIds.length} tasks for user ${currentUserId}`);
+  async queueBulkDelete(taskIds: string[], currentUser: AuthUser) {
+    this.logger.log(`Queueing bulk deletion of ${taskIds.length} tasks for user ${currentUser.id}`);
 
     return this.taskQueue.add(
       'tasks-bulk-delete',
       {
         taskIds,
-        userId: currentUserId,
+        userId: currentUser.id,
         queuedAt: new Date().toISOString(),
       },
       {

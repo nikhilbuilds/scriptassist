@@ -4,6 +4,7 @@ import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
+import { UserRole } from '@modules/users/enum/user-role.enum';
 
 @Injectable()
 export class AuthService {
@@ -50,7 +51,7 @@ export class AuthService {
       throw new UnauthorizedException('Email already exists');
     }
 
-    const user = await this.usersService.create(registerDto);
+    const user = await this.usersService.create({ ...registerDto, role: UserRole.USER });
 
     const token = this.generateToken(user.id);
 
@@ -71,7 +72,7 @@ export class AuthService {
   }
 
   async validateUser(userId: string): Promise<any> {
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findOne(userId, { id: userId, role: 'user' });
 
     if (!user) {
       return null;

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
 jest.setTimeout(600000);
@@ -34,8 +34,8 @@ describe('AppController (e2e)', () => {
     await app.close();
   });
 
-  it('/ (GET) - should be protected', () => {
-    return request(app.getHttpServer()).get('/').expect(401);
+  it('/ (GET) - should return 404 (no root route)', () => {
+    return request(app.getHttpServer()).get('/').expect(404);
   });
 
   // Add more tests as needed

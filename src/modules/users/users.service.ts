@@ -1,10 +1,20 @@
-import { NotFoundException, ConflictException, Inject } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  Inject,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { IUsersRepository, USERS_REPOSITORY } from './users.repository.interface';
+import type { AuthUser } from '../../common/types';
+import type { IUsersRepository } from './users.repository.interface';
+import { USERS_REPOSITORY } from './users.repository.interface';
 import * as bcrypt from 'bcrypt';
+import { UserRole } from './enum/user-role.enum';
 
+@Injectable()
 export class UsersService {
   constructor(
     @Inject(USERS_REPOSITORY)
@@ -31,11 +41,15 @@ export class UsersService {
     return this.usersRepository.findAll();
   }
 
-  async findOne(id: string): Promise<User> {
+  async findOne(id: string, currentUser: AuthUser): Promise<User> {
     const user = await this.usersRepository.findById(id);
 
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    if (currentUser.role === UserRole.USER && currentUser.id !== id) {
+      throw new ForbiddenException('You can only view your own profile');
     }
 
     return user;
@@ -45,8 +59,18 @@ export class UsersService {
     return this.usersRepository.findByEmail(email);
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    const existingUser = await this.findOne(id);
+  async update(id: string, currentUser: AuthUser, updateUserDto: UpdateUserDto): Promise<User> {
+    const existingUser = await this.findOne(id, currentUser);
+
+    // Regular users can only update their own profile
+    if (currentUser.role === UserRole.USER && currentUser.id !== id) {
+      throw new ForbiddenException('You can only update your own profile');
+    }
+
+    // Regular users cannot change their own role
+    if (currentUser.role === UserRole.USER && updateUserDto.role) {
+      throw new ForbiddenException('You cannot change your own role');
+    }
 
     const updateData: Partial<User> = { ...updateUserDto };
     if (updateUserDto.password) {
@@ -64,10 +88,10 @@ export class UsersService {
   }
 
   async remove(id: string): Promise<void> {
-    await this.findOne(id);
-
+    const user = await this.usersRepository.findById(id);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
     await this.usersRepository.delete(id);
-
-    //TODO: Add return statement
   }
 }
