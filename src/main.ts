@@ -2,11 +2,29 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as compression from 'compression';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
-  // Global validation pipe
+
+  app.use(
+    compression({
+      level: Number(process.env.COMPRESSION_LEVEL || 6),
+
+      threshold: Number(process.env.COMPRESSION_THRESHOLD || 1024),
+
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) {
+          return false;
+        }
+
+        return compression.filter(req, res);
+      },
+
+      memLevel: Number(process.env.COMPRESSION_MEM_LEVEL || 8),
+    }),
+  );
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -35,5 +53,8 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`Application running on: http://localhost:${port}`);
   console.log(`Swagger documentation: http://localhost:${port}/api`);
+  console.log(
+    `Compression: Level ${process.env.COMPRESSION_LEVEL || 6}, Threshold ${process.env.COMPRESSION_THRESHOLD || 1024} bytes`,
+  );
 }
-bootstrap(); 
+bootstrap();
