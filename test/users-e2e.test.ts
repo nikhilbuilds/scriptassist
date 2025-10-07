@@ -4,11 +4,12 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { DataSource } from 'typeorm';
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 describe('Users E2E Tests (RBAC)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
 
-  // Test users and their tokens
   let superAdminToken: string;
   let adminToken: string;
   let userToken: string;
@@ -17,6 +18,9 @@ describe('Users E2E Tests (RBAC)', () => {
   let adminId: string;
   let userId: string;
   let otherUserId: string;
+  beforeEach(async () => {
+    await delay(1000);
+  });
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -34,15 +38,14 @@ describe('Users E2E Tests (RBAC)', () => {
     );
 
     await app.init();
+    await delay(2000);
 
     dataSource = moduleFixture.get(DataSource);
 
-    // Setup test users with different roles
     await setupTestUsers();
   });
 
   afterAll(async () => {
-    // Clean up test data
     if (dataSource) {
       await dataSource.query("DELETE FROM users WHERE email LIKE '%@teste2e.com%'");
     }
@@ -50,7 +53,6 @@ describe('Users E2E Tests (RBAC)', () => {
   });
 
   async function setupTestUsers() {
-    // Register super-admin
     const superAdminRes = await request(app.getHttpServer()).post('/auth/register').send({
       email: 'superadmin@teste2e.com',
       password: 'Password123!',
@@ -68,17 +70,14 @@ describe('Users E2E Tests (RBAC)', () => {
     }
     superAdminId = superAdminRes.body.user.id;
 
-    // Update role to super-admin
     await dataSource.query(`UPDATE users SET role = 'super-admin' WHERE id = $1`, [superAdminId]);
 
-    // Login super-admin
     const superAdminLogin = await request(app.getHttpServer()).post('/auth/login').send({
       email: 'superadmin@teste2e.com',
       password: 'Password123!',
     });
     superAdminToken = superAdminLogin.body.access_token;
 
-    // Register admin
     const adminRes = await request(app.getHttpServer()).post('/auth/register').send({
       email: 'admin@teste2e.com',
       password: 'Password123!',
@@ -86,17 +85,14 @@ describe('Users E2E Tests (RBAC)', () => {
     });
     adminId = adminRes.body.user.id;
 
-    // Update role to admin
     await dataSource.query(`UPDATE users SET role = 'admin' WHERE id = $1`, [adminId]);
 
-    // Login admin
     const adminLogin = await request(app.getHttpServer()).post('/auth/login').send({
       email: 'admin@teste2e.com',
       password: 'Password123!',
     });
     adminToken = adminLogin.body.access_token;
 
-    // Register regular user
     const userRes = await request(app.getHttpServer()).post('/auth/register').send({
       email: 'user@teste2e.com',
       password: 'Password123!',
@@ -104,14 +100,12 @@ describe('Users E2E Tests (RBAC)', () => {
     });
     userId = userRes.body.user.id;
 
-    // Login regular user
     const userLogin = await request(app.getHttpServer()).post('/auth/login').send({
       email: 'user@teste2e.com',
       password: 'Password123!',
     });
     userToken = userLogin.body.access_token;
 
-    // Register another user for testing
     const otherUserRes = await request(app.getHttpServer()).post('/auth/register').send({
       email: 'otheruser@teste2e.com',
       password: 'Password123!',
@@ -349,7 +343,6 @@ describe('Users E2E Tests (RBAC)', () => {
 
       expect(response.body.role).toBe('admin');
 
-      // Change back to user
       await request(app.getHttpServer())
         .patch(`/users/${userId}`)
         .set('Authorization', `Bearer ${superAdminToken}`)
@@ -371,7 +364,6 @@ describe('Users E2E Tests (RBAC)', () => {
 
   describe('DELETE /users/:id (Delete User)', () => {
     it('should allow super-admin to delete any user', async () => {
-      // Create a user to delete
       const newUser = await request(app.getHttpServer())
         .post('/users')
         .set('Authorization', `Bearer ${superAdminToken}`)
@@ -389,7 +381,6 @@ describe('Users E2E Tests (RBAC)', () => {
     });
 
     it('should deny admin from deleting users (super-admin only)', async () => {
-      // Create a user to delete
       const newUser = await request(app.getHttpServer())
         .post('/users')
         .set('Authorization', `Bearer ${superAdminToken}`)

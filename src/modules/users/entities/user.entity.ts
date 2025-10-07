@@ -5,6 +5,7 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  VersionColumn,
 } from 'typeorm';
 import { Task } from '../../tasks/entities/task.entity';
 import { Exclude } from 'class-transformer';
@@ -34,6 +35,10 @@ export class User {
 
   @OneToMany('Task', 'user')
   tasks: Task[];
+
+  @VersionColumn()
+  @Exclude({ toPlainOnly: true })
+  version: number;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

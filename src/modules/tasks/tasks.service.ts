@@ -46,6 +46,7 @@ export class TasksService {
     const taskData = {
       ...createTaskDto,
       userId: currentUser.id,
+      dueDate: createTaskDto.dueDate ? new Date(createTaskDto.dueDate) : undefined,
     };
 
     const task = await this.tasksRepository.create(taskData);
@@ -159,13 +160,22 @@ export class TasksService {
     const updateData = { ...updateTaskDto };
     delete (updateData as any).userId;
 
-    const updatedTask = await this.tasksRepository.update(id, updateData);
+    const updatedTask = await this.tasksRepository.update(id, {
+      ...updateData,
+      dueDate: updateTaskDto.dueDate ? new Date(updateTaskDto.dueDate) : existingTask.dueDate,
+    });
 
     if (updateTaskDto.status && originalStatus !== updateTaskDto.status) {
-      await this.taskQueue.add('task-status-update', {
-        taskId: updatedTask.id,
-        status: updatedTask.status,
-      });
+      await this.taskQueue.add(
+        'task-status-update',
+        {
+          taskId: updatedTask.id,
+          status: updatedTask.status,
+        },
+        {
+          jobId: `task-status-${updatedTask.id}`,
+        },
+      );
     }
 
     await this.cacheService.delete(buildEntityCacheKey('task', id));
@@ -209,6 +219,7 @@ export class TasksService {
     const tasksData = createTasksDto.map(dto => ({
       ...dto,
       userId: currentUser.id,
+      dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
     }));
 
     const createdTasks = await this.tasksRepository.batchCreate(tasksData);
@@ -295,7 +306,7 @@ export class TasksService {
           delay: 2000,
         },
         removeOnComplete: true,
-        removeOnFail: false,
+        removeOnFail: { count: 50 }, //TODO: Keep in env
       },
     );
   }
@@ -317,7 +328,7 @@ export class TasksService {
           delay: 2000,
         },
         removeOnComplete: true,
-        removeOnFail: false,
+        removeOnFail: { count: 50 },
       },
     );
   }

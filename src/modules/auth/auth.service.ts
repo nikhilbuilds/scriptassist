@@ -28,8 +28,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid password');
     }
 
+    const tokens = this.generateTokens(user);
+
     return {
-      access_token: this.generateToken(user),
+      ...tokens,
       user: {
         id: user.id,
         email: user.email,
@@ -47,26 +49,73 @@ export class AuthService {
 
     const user = await this.usersService.create({ ...registerDto, role: UserRole.USER });
 
-    const token = this.generateToken(user);
+    const tokens = this.generateTokens(user);
 
     return {
+      ...tokens,
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         role: user.role,
       },
-      token,
     };
   }
 
-  private generateToken(user: { id: string; email: string; role: string }): string {
+  private generateTokens(user: { id: string; email: string; role: string }): {
+    access_token: string;
+    refresh_token: string;
+  } {
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
     };
-    return this.jwtService.sign(payload);
+
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRATION || '15m',
+    });
+
+    const refreshToken = this.jwtService.sign(
+      { sub: user.id, type: 'refresh' },
+      {
+        expiresIn: process.env.JWT_REFRESH_TOKEN_EXPIRATION || '7d',
+      },
+    );
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    };
+  }
+
+  async refreshTokens(
+    refreshToken: string,
+  ): Promise<{ access_token: string; refresh_token: string }> {
+    try {
+      const payload = this.jwtService.verify(refreshToken);
+
+      if (payload.type !== 'refresh') {
+        throw new UnauthorizedException('Invalid token type');
+      }
+
+      const user = await this.usersService.findOne(payload.sub, {
+        id: payload.sub,
+        role: 'user',
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      return this.generateTokens({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      });
+    } catch (error) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
   }
 
   async validateUser(userId: string): Promise<any> {

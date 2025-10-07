@@ -106,6 +106,10 @@ export class UsersService {
       throw new ForbiddenException('You cannot change your own role');
     }
 
+    if (currentUser.role === UserRole.ADMIN && updateUserDto.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('You cannot change your own role to super admin');
+    }
+
     const updateData: Partial<User> = { ...updateUserDto };
     if (updateUserDto.password) {
       updateData.password = await bcrypt.hash(updateUserDto.password, 10);
@@ -123,6 +127,18 @@ export class UsersService {
       if (emailExists) {
         throw new ConflictException(`User with email ${newEmail} already exists`);
       }
+
+      this.logger.warn(
+        `Email change detected for user ${id}: ${oldEmail} -> ${newEmail}. ` +
+          `TODO: Implement email verification flow (send verification email to new address).`,
+      );
+
+      // TODO: In production, implement:
+      // 1. Generate verification token
+      // 2. Send verification email to new address
+      // 3. Store pending email change with token
+      // 4. Only update email after user clicks verification link
+      // 5. Notify old email about change attempt
     }
 
     const updatedUser = await this.usersRepository.update(id, updateData);
@@ -146,5 +162,47 @@ export class UsersService {
 
     await this.cacheService.delete(`user:id:${id}`);
     this.logger.debug(`Invalidated cache for user ID: ${id}`);
+  }
+
+  /**
+   * Change user email with password confirmation
+   * TODO: Implement full email verification flow:
+   * 1. Verify password
+   * 2. Generate verification token
+   * 3. Send verification email to new address
+   * 4. Store pending change
+   * 5. Complete change on verification
+   */
+  async changeEmail(userId: string, newEmail: string, password: string): Promise<void> {
+    const user = await this.usersRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    const passwordValid = await bcrypt.compare(password, user.password);
+    if (!passwordValid) {
+      throw new ForbiddenException('Invalid password');
+    }
+
+    const normalizedNewEmail = normalizeEmail(newEmail);
+
+    const emailExists = await this.usersRepository.findByEmail(normalizedNewEmail);
+    if (emailExists) {
+      throw new ConflictException(`Email ${normalizedNewEmail} is already in use`);
+    }
+
+    this.logger.warn(
+      `Email change request for user ${userId}: ${user.email} -> ${normalizedNewEmail}. ` +
+        `Verification email should be sent to ${normalizedNewEmail}.`,
+    );
+
+    // For now, directly update (in production, this should be pending verification)
+    // await this.usersRepository.update(userId, { email: normalizedNewEmail });
+    // await this.cacheService.delete(`user:id:${userId}`);
+
+    throw new ConflictException(
+      'Email verification flow not fully implemented. ' +
+        'This feature requires email service configuration.',
+    );
   }
 }

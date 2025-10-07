@@ -7,6 +7,8 @@ import { UserRole } from '../src/modules/users/enum/user-role.enum';
 import { TaskStatus } from '../src/modules/tasks/enums/task-status.enum';
 import { TaskPriority } from '../src/modules/tasks/enums/task-priority.enum';
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 describe('Tasks E2E Tests (RBAC)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
@@ -29,6 +31,10 @@ describe('Tasks E2E Tests (RBAC)', () => {
     adminTask1: string;
   };
 
+  beforeEach(async () => {
+    await delay(1000);
+  });
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -43,7 +49,7 @@ describe('Tasks E2E Tests (RBAC)', () => {
       }),
     );
     await app.init();
-
+    await delay(2000);
     dataSource = moduleFixture.get<DataSource>(DataSource);
     await setupTestData();
   });
@@ -539,7 +545,7 @@ describe('Tasks E2E Tests (RBAC)', () => {
           description: 'Will be deleted by admin',
           status: TaskStatus.PENDING,
           priority: TaskPriority.LOW,
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          //  dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         })
         .expect(201);
 

@@ -28,6 +28,7 @@ import { TaskFilterDto } from './dto/task-filter.dto';
 import { BatchCreateTasksDto } from './dto/batch-create-tasks.dto';
 import { BatchDeleteTasksDto } from './dto/batch-delete-tasks.dto';
 import type { AuthUser } from '../../common/types';
+import { SanitizeInput } from '../../common/decorators/sanitize-input.decorator';
 
 @ApiTags('tasks')
 @Controller('tasks')
@@ -39,6 +40,7 @@ export class TasksController {
 
   @Post()
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
+  @SanitizeInput()
   @ApiOperation({ summary: 'Create a new task' })
   create(@Body() createTaskDto: CreateTaskDto, @CurrentUser() user: AuthUser) {
     return this.tasksService.create(createTaskDto, user);
@@ -99,6 +101,7 @@ export class TasksController {
 
   @Patch(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
+  @SanitizeInput()
   @ApiOperation({ summary: 'Update a task (ownership enforced for regular users)' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -148,6 +151,7 @@ export class TasksController {
 
   @Post('batch')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
+  @SanitizeInput()
   @ApiOperation({ summary: 'Batch create multiple tasks (creatorId auto-set)' })
   async batchCreate(@Body() batchCreateDto: BatchCreateTasksDto, @CurrentUser() user: AuthUser) {
     const result = await this.tasksService.batchCreate(batchCreateDto.tasks, user);
@@ -162,6 +166,7 @@ export class TasksController {
   @Post('batch/async')
   @HttpCode(HttpStatus.ACCEPTED)
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
+  @SanitizeInput()
   @ApiOperation({ summary: 'Batch create multiple tasks asynchronously via queue' })
   async batchCreateAsync(
     @Body() batchCreateDto: BatchCreateTasksDto,

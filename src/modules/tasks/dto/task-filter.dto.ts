@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsInt, Min } from 'class-validator';
+import { IsEnum, IsOptional, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { TaskStatus } from '../enums/task-status.enum';
@@ -72,5 +72,6 @@ export class TaskFilterDto {
   @Type(() => Number)
   @IsInt({ message: 'limit must be an integer' })
   @Min(1, { message: 'limit must be at least 1' })
-  limit?: number = 10;
+  @Max(100, { message: 'limit cannot exceed 100' })
+  limit?: number = 10; //TODO: Keep in env
 }

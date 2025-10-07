@@ -21,6 +21,7 @@ import { Roles } from '@common/decorators/roles.decorator';
 import { RolesGuard } from '@common/guards/roles.guard';
 import { CurrentUser } from '@modules/auth/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/types';
+import { SanitizeInput } from '../../common/decorators/sanitize-input.decorator';
 
 @ApiTags('users')
 @Controller('users')
@@ -32,6 +33,7 @@ export class UsersController {
 
   @Post()
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @SanitizeInput()
   @ApiOperation({ summary: 'Create user (Admin/Super-Admin only)' })
   create(@Body() createUserDto: CreateUserDto) {
     //TODO:invite user, sine we can create user from auth controller
@@ -54,6 +56,7 @@ export class UsersController {
 
   @Patch(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
+  @SanitizeInput()
   @ApiOperation({ summary: 'Update user (User: self only, Admin/Super-Admin: any)' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
