@@ -45,16 +45,20 @@ async function bootstrap() {
     .setDescription('Task Management System API')
     .setVersion('1.0')
     .addBearerAuth()
+    .addTag('Health', 'Health check endpoints for monitoring')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
-  console.log(`Application running on: http://localhost:${port}`);
-  console.log(`Swagger documentation: http://localhost:${port}/api`);
+
+  console.log(`\n🚀 Application running on: http://localhost:${port}`);
+  console.log(`📚 Swagger documentation: http://localhost:${port}/api`);
+  console.log(`❤️  Health checks: http://localhost:${port}/health`);
   console.log(
-    `Compression: Level ${process.env.COMPRESSION_LEVEL || 6}, Threshold ${process.env.COMPRESSION_THRESHOLD || 1024} bytes`,
+    `🗜️  Compression: Level ${process.env.COMPRESSION_LEVEL || 6}, Threshold ${process.env.COMPRESSION_THRESHOLD || 1024} bytes`,
   );
+  console.log('');
 }
 bootstrap();

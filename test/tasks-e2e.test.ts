@@ -362,6 +362,19 @@ describe('Tasks E2E Tests (RBAC)', () => {
       });
     });
 
+    it('should handle combined filters with pagination', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/tasks?status=PENDING&priority=HIGH&page=1&limit=2')
+        .set('Authorization', `Bearer ${tokens.user1}`)
+        .expect(200);
+
+      expect(response.body.data.length).toBeLessThanOrEqual(2);
+      response.body.data.forEach((task: any) => {
+        expect(task.status).toBe('PENDING');
+        expect(task.priority).toBe('HIGH');
+      });
+    });
+
     it('should handle pagination', async () => {
       const response = await request(app.getHttpServer())
         .get('/tasks?page=1&limit=1')
@@ -373,6 +386,17 @@ describe('Tasks E2E Tests (RBAC)', () => {
       expect(response.body).toHaveProperty('page', 1);
       expect(response.body).toHaveProperty('limit', 1);
       expect(response.body.data.length).toBeLessThanOrEqual(1);
+    });
+
+    it('should handle invalid pagination parameters', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/tasks?page=-1&limit=0')
+        .set('Authorization', `Bearer ${tokens.user1}`)
+        .expect(400);
+
+      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.message).toContain('page must be at least 1');
+      expect(response.body.message).toContain('limit must be at least 1');
     });
   });
 

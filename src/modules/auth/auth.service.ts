@@ -28,14 +28,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid password');
     }
 
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    };
-
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: this.generateToken(user),
       user: {
         id: user.id,
         email: user.email,
@@ -53,7 +47,7 @@ export class AuthService {
 
     const user = await this.usersService.create({ ...registerDto, role: UserRole.USER });
 
-    const token = this.generateToken(user.id);
+    const token = this.generateToken(user);
 
     return {
       user: {
@@ -66,8 +60,12 @@ export class AuthService {
     };
   }
 
-  private generateToken(userId: string) {
-    const payload = { sub: userId };
+  private generateToken(user: { id: string; email: string; role: string }): string {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
     return this.jwtService.sign(payload);
   }
 

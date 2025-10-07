@@ -15,16 +15,16 @@ import {
 export class TasksRepository implements ITasksRepository {
   constructor(
     @InjectRepository(Task)
-    private readonly ormRepository: Repository<Task>,
+    private readonly tasksRepo: Repository<Task>,
   ) {}
 
   async create(taskData: Partial<Task>): Promise<Task> {
-    const task = this.ormRepository.create(taskData);
-    return this.ormRepository.save(task);
+    const task = this.tasksRepo.create(taskData);
+    return this.tasksRepo.save(task);
   }
 
   async findAll(withRelations: boolean = false): Promise<Task[]> {
-    const query = this.ormRepository.createQueryBuilder('task').orderBy('task.createdAt', 'DESC');
+    const query = this.tasksRepo.createQueryBuilder('task').orderBy('task.createdAt', 'DESC');
 
     if (withRelations) {
       query.leftJoinAndSelect('task.user', 'user');
@@ -37,7 +37,7 @@ export class TasksRepository implements ITasksRepository {
     filters: TaskFilterOptions,
     pagination?: PaginationOptions,
   ): Promise<PaginatedResult<Task>> {
-    const query = this.ormRepository.createQueryBuilder('task').leftJoin('task.user', 'user');
+    const query = this.tasksRepo.createQueryBuilder('task').leftJoin('task.user', 'user');
 
     if (filters.status) {
       query.andWhere('task.status = :status', { status: filters.status });
@@ -58,6 +58,7 @@ export class TasksRepository implements ITasksRepository {
 
     query.orderBy('task.createdAt', 'DESC');
 
+    // Use getManyAndCount() to avoid double scan (single query instead of getCount + getMany)
     const [data, total] = await query.getManyAndCount();
 
     return {
@@ -70,7 +71,7 @@ export class TasksRepository implements ITasksRepository {
   }
 
   async findById(id: string, withRelations: boolean = false): Promise<Task | null> {
-    const query = this.ormRepository.createQueryBuilder('task').where('task.id = :id', { id });
+    const query = this.tasksRepo.createQueryBuilder('task').where('task.id = :id', { id });
 
     if (withRelations) {
       query.leftJoinAndSelect('task.user', 'user');
@@ -80,7 +81,7 @@ export class TasksRepository implements ITasksRepository {
   }
 
   async findByStatus(status: TaskStatus): Promise<Task[]> {
-    return this.ormRepository
+    return this.tasksRepo
       .createQueryBuilder('task')
       .where('task.status = :status', { status })
       .orderBy('task.createdAt', 'DESC')
@@ -88,7 +89,7 @@ export class TasksRepository implements ITasksRepository {
   }
 
   async findByUserId(userId: string): Promise<Task[]> {
-    return this.ormRepository
+    return this.tasksRepo
       .createQueryBuilder('task')
       .where('task.userId = :userId', { userId })
       .orderBy('task.createdAt', 'DESC')
@@ -96,7 +97,7 @@ export class TasksRepository implements ITasksRepository {
   }
 
   async findByUserIdAndStatus(userId: string, status: TaskStatus): Promise<Task[]> {
-    return this.ormRepository
+    return this.tasksRepo
       .createQueryBuilder('task')
       .where('task.userId = :userId', { userId })
       .andWhere('task.status = :status', { status })
@@ -105,20 +106,27 @@ export class TasksRepository implements ITasksRepository {
   }
 
   async update(id: string, taskData: Partial<Task>): Promise<Task> {
-    await this.ormRepository.update(id, taskData);
-    const updatedTask = await this.findById(id);
-    if (!updatedTask) {
-      throw new Error(`Task with ID ${id} not found after update`);
-    }
-    return updatedTask;
+    return this.tasksRepo.manager.transaction(async transactionalEntityManager => {
+      await transactionalEntityManager.update(Task, id, taskData);
+
+      const updatedTask = await transactionalEntityManager.findOne(Task, {
+        where: { id } as any,
+      });
+
+      if (!updatedTask) {
+        throw new Error(`Task with ID ${id} not found after update`);
+      }
+
+      return updatedTask;
+    });
   }
 
   async delete(id: string): Promise<void> {
-    await this.ormRepository.delete(id);
+    await this.tasksRepo.delete(id);
   }
 
   async batchUpdateStatus(ids: string[], status: TaskStatus): Promise<number> {
-    const result = await this.ormRepository
+    const result = await this.tasksRepo
       .createQueryBuilder()
       .update(Task)
       .set({ status })
@@ -129,7 +137,7 @@ export class TasksRepository implements ITasksRepository {
   }
 
   async findCompactByIds(ids: string[]): Promise<Pick<Task, 'id' | 'userId'>[]> {
-    return this.ormRepository
+    return this.tasksRepo
       .createQueryBuilder('task')
       .select(['task.id', 'task.userId'])
       .where({ id: In(ids) })
@@ -137,7 +145,7 @@ export class TasksRepository implements ITasksRepository {
   }
 
   async batchDelete(ids: string[]): Promise<number> {
-    const result = await this.ormRepository
+    const result = await this.tasksRepo
       .createQueryBuilder()
       .delete()
       .from(Task)
@@ -148,7 +156,7 @@ export class TasksRepository implements ITasksRepository {
   }
 
   async getStatistics(): Promise<TaskStatistics> {
-    const result = await this.ormRepository
+    const result = await this.tasksRepo
       .createQueryBuilder('task')
       .select([
         'COUNT(*) as total',
@@ -169,7 +177,7 @@ export class TasksRepository implements ITasksRepository {
   }
 
   async batchCreate(tasksData: Partial<Task>[]): Promise<Task[]> {
-    return this.ormRepository.manager.transaction(async transactionalEntityManager => {
+    return this.tasksRepo.manager.transaction(async transactionalEntityManager => {
       const tasks = tasksData.map(taskData => transactionalEntityManager.create(Task, taskData));
 
       return transactionalEntityManager.save(Task, tasks);

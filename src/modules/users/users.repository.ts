@@ -43,12 +43,28 @@ export class UsersRepository implements IUsersRepository {
   }
 
   async update(id: string, userData: Partial<User>): Promise<User> {
-    await this.userRepo.update(id, userData);
-    const updatedUser = await this.findById(id);
-    if (!updatedUser) {
-      throw new Error(`User with ID ${id} not found after update`);
-    }
-    return updatedUser;
+    return this.userRepo.manager.transaction(async transactionalEntityManager => {
+      await transactionalEntityManager.update(User, id, userData);
+
+      const updatedUser = await transactionalEntityManager
+        .createQueryBuilder(User, 'user')
+        .select([
+          'user.id',
+          'user.email',
+          'user.name',
+          'user.role',
+          'user.createdAt',
+          'user.updatedAt',
+        ])
+        .where('user.id = :id', { id })
+        .getOne();
+
+      if (!updatedUser) {
+        throw new Error(`User with ID ${id} not found after update`);
+      }
+
+      return updatedUser;
+    });
   }
 
   async delete(id: string): Promise<void> {
