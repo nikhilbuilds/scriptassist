@@ -77,7 +77,7 @@ export class TaskProcessorService extends WorkerHost {
   }
 
   private async handleBulkCreate(job: Job) {
-    const { tasks, userId } = job.data;
+    const { tasks, userId, userRole = 'user' } = job.data;
 
     if (!tasks || !Array.isArray(tasks)) {
       throw new Error('Invalid tasks: must be an array');
@@ -98,7 +98,8 @@ export class TaskProcessorService extends WorkerHost {
     this.logger.debug(`[Job ${job.id}] Bulk creating ${tasks.length} tasks for user ${userId}`);
 
     try {
-      const result = await this.tasksService.batchCreate(tasks, userId);
+      const currentUser = { id: userId, role: userRole };
+      const result = await this.tasksService.batchCreate(tasks, currentUser);
 
       return {
         success: true,
@@ -115,7 +116,7 @@ export class TaskProcessorService extends WorkerHost {
   }
 
   private async handleBulkDelete(job: Job) {
-    const { taskIds, userId } = job.data;
+    const { taskIds, userId, userRole = 'user' } = job.data;
 
     if (!taskIds || !Array.isArray(taskIds)) {
       throw new Error('Invalid taskIds: must be an array');
@@ -136,7 +137,8 @@ export class TaskProcessorService extends WorkerHost {
     this.logger.debug(`[Job ${job.id}] Bulk deleting ${taskIds.length} tasks for user ${userId}`);
 
     try {
-      const deletedCount = await this.tasksService.batchDeleteForUser(taskIds, userId);
+      const currentUser = { id: userId, role: userRole };
+      const deletedCount = await this.tasksService.batchDeleteForUser(taskIds, currentUser);
 
       return {
         success: true,

@@ -51,8 +51,6 @@ export class TasksRepository implements ITasksRepository {
       query.andWhere('task.userId = :userId', { userId: filters.userId });
     }
 
-    const total = await query.getCount();
-
     if (pagination) {
       const skip = (pagination.page - 1) * pagination.limit;
       query.skip(skip).take(pagination.limit);
@@ -60,8 +58,7 @@ export class TasksRepository implements ITasksRepository {
 
     query.orderBy('task.createdAt', 'DESC');
 
-    //TODO: optimize this query, getManyAndCount
-    const data = await query.getMany();
+    const [data, total] = await query.getManyAndCount();
 
     return {
       data,
@@ -98,6 +95,15 @@ export class TasksRepository implements ITasksRepository {
       .getMany();
   }
 
+  async findByUserIdAndStatus(userId: string, status: TaskStatus): Promise<Task[]> {
+    return this.ormRepository
+      .createQueryBuilder('task')
+      .where('task.userId = :userId', { userId })
+      .andWhere('task.status = :status', { status })
+      .orderBy('task.createdAt', 'DESC')
+      .getMany();
+  }
+
   async update(id: string, taskData: Partial<Task>): Promise<Task> {
     await this.ormRepository.update(id, taskData);
     const updatedTask = await this.findById(id);
@@ -120,6 +126,14 @@ export class TasksRepository implements ITasksRepository {
       .execute();
 
     return result.affected || 0;
+  }
+
+  async findCompactByIds(ids: string[]): Promise<Pick<Task, 'id' | 'userId'>[]> {
+    return this.ormRepository
+      .createQueryBuilder('task')
+      .select(['task.id', 'task.userId'])
+      .where({ id: In(ids) })
+      .getMany();
   }
 
   async batchDelete(ids: string[]): Promise<number> {

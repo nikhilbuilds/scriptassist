@@ -30,7 +30,4 @@ export class CreateTaskDto {
   @Type(() => Date)
   @IsDate()
   dueDate?: Date;
-
-  //TODO: remove userId, it will be automatically set from authenticated user
-  userId?: string;
 }

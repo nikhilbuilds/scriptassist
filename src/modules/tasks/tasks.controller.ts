@@ -10,6 +10,8 @@ import {
   Query,
   ValidationPipe,
   ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -119,6 +121,7 @@ export class TasksController {
   }
 
   @Delete('batch/async')
+  @HttpCode(HttpStatus.ACCEPTED)
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
   @ApiOperation({ summary: 'Batch delete multiple tasks asynchronously via queue' })
   async batchDeleteAsync(
@@ -157,6 +160,7 @@ export class TasksController {
   }
 
   @Post('batch/async')
+  @HttpCode(HttpStatus.ACCEPTED)
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
   @ApiOperation({ summary: 'Batch create multiple tasks asynchronously via queue' })
   async batchCreateAsync(

@@ -21,7 +21,18 @@ export class UsersRepository implements IUsersRepository {
   }
 
   async findById(id: string): Promise<User | null> {
-    return this.userRepo.createQueryBuilder('user').where('user.id = :id', { id }).getOne();
+    return this.userRepo
+      .createQueryBuilder('user')
+      .select([
+        'user.id',
+        'user.email',
+        'user.name',
+        'user.role',
+        'user.createdAt',
+        'user.updatedAt',
+      ])
+      .where('user.id = :id', { id })
+      .getOne();
   }
 
   async findByEmail(email: string): Promise<User | null> {

@@ -6,6 +6,7 @@ import { TasksController } from './tasks.controller';
 import { Task } from './entities/task.entity';
 import { TasksRepository } from './tasks.repository';
 import { TASKS_REPOSITORY } from './tasks.repository.interface';
+import { CacheService } from '../../common/services/cache.service';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { TASKS_REPOSITORY } from './tasks.repository.interface';
   controllers: [TasksController],
   providers: [
     TasksService,
+    CacheService,
     {
       provide: TASKS_REPOSITORY,
       useClass: TasksRepository,

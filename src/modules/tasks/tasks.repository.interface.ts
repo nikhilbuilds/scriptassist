@@ -45,6 +45,8 @@ export interface ITasksRepository {
 
   findByUserId(userId: string): Promise<Task[]>;
 
+  findByUserIdAndStatus(userId: string, status: TaskStatus): Promise<Task[]>;
+
   update(id: string, taskData: Partial<Task>): Promise<Task>;
 
   delete(id: string): Promise<void>;
@@ -52,6 +54,8 @@ export interface ITasksRepository {
   batchUpdateStatus(ids: string[], status: TaskStatus): Promise<number>;
 
   batchDelete(ids: string[]): Promise<number>;
+
+  findCompactByIds(ids: string[]): Promise<Pick<Task, 'id' | 'userId'>[]>;
 
   getStatistics(): Promise<TaskStatistics>;
 
