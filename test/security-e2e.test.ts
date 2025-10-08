@@ -234,6 +234,82 @@ describe('Security E2E Tests', () => {
   // ========================================
 
   describe('Authentication', () => {
+    // ========================================
+    // 2.1 Invalid Credentials Tests (User Enumeration Prevention)
+    // ========================================
+
+    it('should return 401 with generic message for non-existent email', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'nonexistent@test.com',
+          password: 'SomePassword123!',
+        })
+        .expect(401);
+
+      expect(response.body.message).toBe('Invalid credentials');
+      expect(response.body.message).not.toContain('email');
+      expect(response.body.message).not.toContain('not found');
+    });
+
+    it('should return 401 with generic message for wrong password', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'user-security@test.com', // Valid email
+          password: 'WrongPassword123!', // Wrong password
+        })
+        .expect(401);
+
+      expect(response.body.message).toBe('Invalid credentials');
+      expect(response.body.message).not.toContain('password');
+      expect(response.body.message).not.toContain('incorrect');
+    });
+
+    it('should return same error message for both invalid email and invalid password (user enumeration prevention)', async () => {
+      const invalidEmailResponse = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'definitely-does-not-exist@test.com',
+          password: 'SomePassword123!',
+        })
+        .expect(401);
+
+      const invalidPasswordResponse = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'user-security@test.com', // Valid email
+          password: 'DefinitelyWrongPassword!',
+        })
+        .expect(401);
+
+      expect(invalidEmailResponse.body.message).toBe('Invalid credentials');
+      expect(invalidPasswordResponse.body.message).toBe('Invalid credentials');
+      expect(invalidEmailResponse.body.message).toBe(invalidPasswordResponse.body.message);
+
+      console.log('✅ User enumeration prevention: Same generic error for both cases');
+    });
+
+    it('should return 409 Conflict for duplicate email registration', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'user-security@test.com', // Already registered
+          password: 'NewPassword123!',
+          name: 'Duplicate User',
+        })
+        .expect(409);
+
+      // Error response is formatted by global exception filter
+      // With centralized error codes, the message is extracted as a string
+      expect(response.body.message).toBe('Email already exists');
+      expect(response.status).toBe(409);
+    });
+
+    // ========================================
+    // 2.2 Token Validation Tests
+    // ========================================
+
     it('should reject requests without authorization header', async () => {
       await request(app.getHttpServer()).get('/tasks').expect(401);
       await request(app.getHttpServer()).get('/users').expect(401);

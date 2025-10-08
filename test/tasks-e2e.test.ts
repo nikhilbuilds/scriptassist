@@ -214,7 +214,10 @@ describe('Tasks E2E Tests (RBAC)', () => {
     }
 
     try {
-      await dataSource.query('DELETE FROM tasks WHERE 1=1');
+      //Delete only created tasks in test or delete task where user email contains teste2e.com
+      await dataSource.query(
+        "DELETE FROM tasks WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%-tasks@teste2e.com')",
+      );
       await dataSource.query("DELETE FROM users WHERE email LIKE '%@teste2e.com'");
     } catch (error) {
       console.error('Cleanup error:', error);

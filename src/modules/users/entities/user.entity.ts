@@ -16,7 +16,7 @@ import { UserRole } from '../enum/user-role.enum';
 @Index('idx_users_role', ['role'])
 @Index('idx_users_email', ['email'])
 export class User {
-  @PrimaryGeneratedColumn('uuid') //index
+  @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ unique: true })

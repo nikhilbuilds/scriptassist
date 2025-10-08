@@ -16,7 +16,7 @@ import {
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -29,6 +29,26 @@ import { BatchCreateTasksDto } from './dto/batch-create-tasks.dto';
 import { BatchDeleteTasksDto } from './dto/batch-delete-tasks.dto';
 import type { AuthUser } from '../../common/types';
 import { SanitizeInput } from '../../common/decorators/sanitize-input.decorator';
+import {
+  TaskResponseDto,
+  PaginatedTaskResponseDto,
+  BatchTaskResponseDto,
+  BatchDeleteResponseDto,
+  TaskStatsResponseDto,
+} from './dto/task-response.dto';
+import { JobQueuedResponseDto } from '../../common/dto/job-queued-response.dto';
+import {
+  ApiTaskCreate,
+  ApiTaskList,
+  ApiTaskGet,
+  ApiTaskUpdate,
+  ApiTaskDelete,
+  ApiTaskStats,
+  ApiTaskBatchCreate,
+  ApiTaskBatchCreateAsync,
+  ApiTaskBatchDelete,
+  ApiTaskBatchDeleteAsync,
+} from '../../common/decorators/swagger/api-task.decorator';
 
 @ApiTags('tasks')
 @Controller('tasks')
@@ -41,14 +61,14 @@ export class TasksController {
   @Post()
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
   @SanitizeInput()
-  @ApiOperation({ summary: 'Create a new task' })
+  @ApiTaskCreate(TaskResponseDto)
   create(@Body() createTaskDto: CreateTaskDto, @CurrentUser() user: AuthUser) {
     return this.tasksService.create(createTaskDto, user);
   }
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
-  @ApiOperation({ summary: 'Find all tasks with optional filtering (scoped by role)' })
+  @ApiTaskList(PaginatedTaskResponseDto)
   async findAll(
     @CurrentUser() user: AuthUser,
     @Query(
@@ -67,34 +87,23 @@ export class TasksController {
       ...(priority && { priority }),
     };
 
-    const hasFilters = status || priority;
-
-    if (hasFilters || page > 1) {
-      return this.tasksService.findWithFiltersForUser(user, filters, {
-        pagination: { page, limit },
-      });
-    }
-
-    const tasks = await this.tasksService.findAllForUser(user);
-    return {
-      data: tasks.slice(0, limit),
-      total: tasks.length,
-      page: 1,
-      limit,
-      totalPages: Math.ceil(tasks.length / limit),
-    };
+    // Always use the paginated/cached path for consistency and performance
+    // Even with no filters, this leverages DB-level pagination and caching
+    return this.tasksService.findWithFiltersForUser(user, filters, {
+      pagination: { page, limit },
+    });
   }
 
   @Get('stats')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
-  @ApiOperation({ summary: 'Get task statistics (scoped by role)' })
+  @ApiTaskStats(TaskStatsResponseDto)
   async getStats(@CurrentUser() user: AuthUser) {
     return this.tasksService.getStatisticsForUser(user);
   }
 
   @Get(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
-  @ApiOperation({ summary: 'Find a task by ID (ownership enforced for regular users)' })
+  @ApiTaskGet(TaskResponseDto)
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.tasksService.findOne(id, user);
   }
@@ -102,7 +111,7 @@ export class TasksController {
   @Patch(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
   @SanitizeInput()
-  @ApiOperation({ summary: 'Update a task (ownership enforced for regular users)' })
+  @ApiTaskUpdate(TaskResponseDto)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateTaskDto: UpdateTaskDto,
@@ -113,7 +122,7 @@ export class TasksController {
 
   @Delete('batch')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
-  @ApiOperation({ summary: 'Batch delete multiple tasks (scoped by role)' })
+  @ApiTaskBatchDelete(BatchDeleteResponseDto)
   async batchDelete(@Body() batchDeleteDto: BatchDeleteTasksDto, @CurrentUser() user: AuthUser) {
     const deletedCount = await this.tasksService.batchDeleteForUser(batchDeleteDto.taskIds, user);
 
@@ -126,7 +135,7 @@ export class TasksController {
   @Delete('batch/async')
   @HttpCode(HttpStatus.ACCEPTED)
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
-  @ApiOperation({ summary: 'Batch delete multiple tasks asynchronously via queue' })
+  @ApiTaskBatchDeleteAsync(JobQueuedResponseDto)
   async batchDeleteAsync(
     @Body() batchDeleteDto: BatchDeleteTasksDto,
     @CurrentUser() user: AuthUser,
@@ -143,7 +152,7 @@ export class TasksController {
 
   @Delete(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
-  @ApiOperation({ summary: 'Delete a task (ownership enforced for regular users)' })
+  @ApiTaskDelete()
   async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     await this.tasksService.remove(id, user);
     return { message: 'Task deleted successfully' };
@@ -152,7 +161,7 @@ export class TasksController {
   @Post('batch')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
   @SanitizeInput()
-  @ApiOperation({ summary: 'Batch create multiple tasks (creatorId auto-set)' })
+  @ApiTaskBatchCreate(BatchTaskResponseDto)
   async batchCreate(@Body() batchCreateDto: BatchCreateTasksDto, @CurrentUser() user: AuthUser) {
     const result = await this.tasksService.batchCreate(batchCreateDto.tasks, user);
 
@@ -167,7 +176,7 @@ export class TasksController {
   @HttpCode(HttpStatus.ACCEPTED)
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.USER)
   @SanitizeInput()
-  @ApiOperation({ summary: 'Batch create multiple tasks asynchronously via queue' })
+  @ApiTaskBatchCreateAsync(JobQueuedResponseDto)
   async batchCreateAsync(
     @Body() batchCreateDto: BatchCreateTasksDto,
     @CurrentUser() user: AuthUser,

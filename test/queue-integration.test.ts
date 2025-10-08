@@ -18,7 +18,7 @@ describe('Queue Processing Integration Tests', () => {
   let testTaskId: string;
 
   beforeEach(async () => {
-    await delay(1000);
+    await delay(500);
   });
 
   beforeAll(async () => {
@@ -39,7 +39,7 @@ describe('Queue Processing Integration Tests', () => {
     );
     await app.init();
 
-    await delay(2000);
+    await delay(500);
 
     dataSource = moduleFixture.get<DataSource>(DataSource);
     taskQueue = app.get(getQueueToken('task-processing'));
@@ -59,7 +59,7 @@ describe('Queue Processing Integration Tests', () => {
     superAdminToken = registerRes.body.access_token;
     testUserId = registerRes.body.user.id;
 
-    await delay(1000);
+    await delay(500);
 
     const taskRes = await request(app.getHttpServer())
       .post('/tasks')

@@ -58,7 +58,6 @@ export class TasksRepository implements ITasksRepository {
 
     query.orderBy('task.createdAt', 'DESC');
 
-    // Use getManyAndCount() to avoid double scan (single query instead of getCount + getMany)
     const [data, total] = await query.getManyAndCount();
 
     return {
@@ -74,7 +73,9 @@ export class TasksRepository implements ITasksRepository {
     const query = this.tasksRepo.createQueryBuilder('task').where('task.id = :id', { id });
 
     if (withRelations) {
-      query.leftJoinAndSelect('task.user', 'user');
+      query
+        .leftJoinAndSelect('task.user', 'user')
+        .addSelect(['user.id', 'user.email', 'user.name', 'user.role']);
     }
 
     return query.getOne();

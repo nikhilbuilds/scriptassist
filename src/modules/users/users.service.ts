@@ -1,11 +1,4 @@
-import {
-  NotFoundException,
-  ConflictException,
-  Inject,
-  ForbiddenException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -18,6 +11,7 @@ import { UserRole } from './enum/user-role.enum';
 import type { PublicUser } from './types/user-public.type';
 import { toPublicUser } from './utils/users.utils';
 import { normalizeEmail } from '../../common/utils/normalizers.util';
+import { ErrorCode, forbid, notFound, conflict } from '../../common/errors';
 
 @Injectable()
 export class UsersService {
@@ -35,7 +29,7 @@ export class UsersService {
 
     const existingUser = await this.usersRepository.findByEmail(normalizedEmail);
     if (existingUser) {
-      throw new ConflictException(`User with email ${normalizedEmail} already exists`);
+      conflict(ErrorCode.USER_EMAIL_ALREADY_EXISTS);
     }
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
@@ -60,7 +54,7 @@ export class UsersService {
     if (cachedUser) {
       this.logger.debug(`Cache hit for user ID: ${id}`);
       if (currentUser.role === UserRole.USER && currentUser.id !== id) {
-        throw new ForbiddenException('You can only view your own profile');
+        forbid(ErrorCode.USER_SELF_VIEW_ONLY);
       }
       return cachedUser;
     }
@@ -69,11 +63,11 @@ export class UsersService {
     const user = await this.usersRepository.findById(id);
 
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      notFound(ErrorCode.USER_NOT_FOUND);
     }
 
     if (currentUser.role === UserRole.USER && currentUser.id !== id) {
-      throw new ForbiddenException('You can only view your own profile');
+      forbid(ErrorCode.USER_SELF_VIEW_ONLY);
     }
 
     const publicUser = toPublicUser(user);
@@ -99,15 +93,15 @@ export class UsersService {
     const existingUser = await this.findOne(id, currentUser);
 
     if (currentUser.role === UserRole.USER && currentUser.id !== id) {
-      throw new ForbiddenException('You can only update your own profile');
+      forbid(ErrorCode.USER_SELF_UPDATE_ONLY);
     }
 
     if (currentUser.role === UserRole.USER && updateUserDto.role) {
-      throw new ForbiddenException('You cannot change your own role');
+      forbid(ErrorCode.USER_ROLE_CHANGE_FORBIDDEN);
     }
 
     if (currentUser.role === UserRole.ADMIN && updateUserDto.role === UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException('You cannot change your own role to super admin');
+      forbid(ErrorCode.USER_ROLE_SUPER_ADMIN_FORBIDDEN);
     }
 
     const updateData: Partial<User> = { ...updateUserDto };
@@ -125,7 +119,7 @@ export class UsersService {
 
       const emailExists = await this.usersRepository.findByEmail(newEmail);
       if (emailExists) {
-        throw new ConflictException(`User with email ${newEmail} already exists`);
+        conflict(ErrorCode.USER_EMAIL_ALREADY_EXISTS);
       }
 
       this.logger.warn(
@@ -155,7 +149,7 @@ export class UsersService {
   async remove(id: string): Promise<void> {
     const user = await this.usersRepository.findById(id);
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      notFound(ErrorCode.USER_NOT_FOUND);
     }
 
     await this.usersRepository.delete(id);
@@ -176,19 +170,19 @@ export class UsersService {
   async changeEmail(userId: string, newEmail: string, password: string): Promise<void> {
     const user = await this.usersRepository.findById(userId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      notFound(ErrorCode.USER_NOT_FOUND);
     }
 
     const passwordValid = await bcrypt.compare(password, user.password);
     if (!passwordValid) {
-      throw new ForbiddenException('Invalid password');
+      forbid(ErrorCode.USER_PASSWORD_INVALID);
     }
 
     const normalizedNewEmail = normalizeEmail(newEmail);
 
     const emailExists = await this.usersRepository.findByEmail(normalizedNewEmail);
     if (emailExists) {
-      throw new ConflictException(`Email ${normalizedNewEmail} is already in use`);
+      conflict(ErrorCode.USER_EMAIL_ALREADY_EXISTS);
     }
 
     this.logger.warn(
@@ -200,9 +194,6 @@ export class UsersService {
     // await this.usersRepository.update(userId, { email: normalizedNewEmail });
     // await this.cacheService.delete(`user:id:${userId}`);
 
-    throw new ConflictException(
-      'Email verification flow not fully implemented. ' +
-        'This feature requires email service configuration.',
-    );
+    conflict(ErrorCode.USER_EMAIL_VERIFICATION_NOT_IMPLEMENTED);
   }
 }

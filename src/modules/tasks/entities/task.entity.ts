@@ -21,7 +21,7 @@ import { TaskPriority } from '../enums/task-priority.enum';
 @Index('idx_tasks_user_priority', ['userId', 'priority'])
 @Index('idx_tasks_user_created', ['userId', 'createdAt'])
 export class Task {
-  @PrimaryGeneratedColumn('uuid') //index
+  @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column()
@@ -35,14 +35,14 @@ export class Task {
     enum: TaskStatus,
     default: TaskStatus.PENDING,
   })
-  status: TaskStatus; //index
+  status: TaskStatus;
 
   @Column({
     type: 'enum',
     enum: TaskPriority,
     default: TaskPriority.MEDIUM,
   })
-  priority: TaskPriority; //index
+  priority: TaskPriority;
 
   @Column({ name: 'due_date', nullable: true, type: 'timestamp' })
   dueDate: Date;

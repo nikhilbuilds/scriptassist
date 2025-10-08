@@ -1,10 +1,11 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '@modules/users/enum/user-role.enum';
+import { ErrorCode, unauthorized, conflict } from '../../common/errors';
 
 @Injectable()
 export class AuthService {
@@ -19,13 +20,13 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
-      throw new UnauthorizedException('Invalid email');
+      unauthorized(ErrorCode.AUTH_INVALID_CREDENTIALS);
     }
 
     const passwordValid = await bcrypt.compare(password, user.password);
 
     if (!passwordValid) {
-      throw new UnauthorizedException('Invalid password');
+      unauthorized(ErrorCode.AUTH_INVALID_CREDENTIALS);
     }
 
     const tokens = this.generateTokens(user);
@@ -44,7 +45,7 @@ export class AuthService {
     const existingUser = await this.usersService.findByEmail(registerDto.email);
 
     if (existingUser) {
-      throw new UnauthorizedException('Email already exists');
+      conflict(ErrorCode.USER_EMAIL_ALREADY_EXISTS);
     }
 
     const user = await this.usersService.create({ ...registerDto, role: UserRole.USER });
@@ -96,7 +97,7 @@ export class AuthService {
       const payload = this.jwtService.verify(refreshToken);
 
       if (payload.type !== 'refresh') {
-        throw new UnauthorizedException('Invalid token type');
+        unauthorized(ErrorCode.AUTH_TOKEN_INVALID_TYPE);
       }
 
       const user = await this.usersService.findOne(payload.sub, {
@@ -105,7 +106,7 @@ export class AuthService {
       });
 
       if (!user) {
-        throw new UnauthorizedException('User not found');
+        unauthorized(ErrorCode.AUTH_USER_NOT_FOUND);
       }
 
       return this.generateTokens({
@@ -114,7 +115,7 @@ export class AuthService {
         role: user.role,
       });
     } catch (error) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      unauthorized(ErrorCode.AUTH_TOKEN_EXPIRED);
     }
   }
 

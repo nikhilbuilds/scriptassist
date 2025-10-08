@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Task } from './entities/task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -20,6 +20,7 @@ import {
   buildEntityCacheKey,
 } from '../../common/utils/cache.util';
 import { isAdminOrSuperAdmin } from '../users/utils/users.utils';
+import { ErrorCode, forbid, notFound } from '../../common/errors';
 
 interface TaskQueryOptions {
   withRelations?: boolean;
@@ -134,11 +135,11 @@ export class TasksService {
     }
 
     if (!task) {
-      throw new NotFoundException(`Task with ID ${id} not found`);
+      notFound(ErrorCode.TASK_NOT_FOUND);
     }
 
     if (!isAdminOrSuperAdmin(currentUser.role) && task.userId !== currentUser.id) {
-      throw new ForbiddenException('You do not have permission to access this task');
+      forbid(ErrorCode.TASK_NOT_OWNED);
     }
 
     return task;
@@ -188,7 +189,7 @@ export class TasksService {
   async updateStatus(id: string, status: TaskStatus): Promise<Task> {
     const task = await this.tasksRepository.findById(id, false);
     if (!task) {
-      throw new NotFoundException(`Task with ID ${id} not found`);
+      notFound(ErrorCode.TASK_NOT_FOUND);
     }
 
     const updatedTask = await this.tasksRepository.update(id, { status });
@@ -248,13 +249,13 @@ export class TasksService {
 
     const notFoundIds = taskIds.filter(id => !taskMap.has(id));
     if (notFoundIds.length > 0) {
-      throw new NotFoundException(`Tasks not found: ${notFoundIds.join(', ')}`);
+      notFound(ErrorCode.TASKS_NOT_FOUND);
     }
 
     if (!isAdminOrSuperAdmin(currentUser.role)) {
       const unauthorizedTasks = tasks.filter(task => task.userId !== currentUser.id);
       if (unauthorizedTasks.length > 0) {
-        throw new ForbiddenException('You do not have permission to delete some of these tasks');
+        forbid(ErrorCode.TASKS_DELETE_PERMISSION_DENIED);
       }
     }
 
