@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -12,6 +13,13 @@ import { TaskStatus } from '../enums/task-status.enum';
 import { TaskPriority } from '../enums/task-priority.enum';
 
 @Entity('tasks')
+@Index('idx_tasks_user_id', ['userId'])
+@Index('idx_tasks_status', ['status'])
+@Index('idx_tasks_priority', ['priority'])
+@Index('idx_tasks_due_date', ['dueDate'])
+@Index('idx_tasks_user_status', ['userId', 'status'])
+@Index('idx_tasks_user_priority', ['userId', 'priority'])
+@Index('idx_tasks_user_created', ['userId', 'createdAt'])
 export class Task {
   @PrimaryGeneratedColumn('uuid') //index
   id: string;

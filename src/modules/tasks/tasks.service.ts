@@ -333,6 +333,3 @@ export class TasksService {
     );
   }
 }
-//TODO: Notification layer
-//TODO: Add Composite index based on UI
-//Think about push/pull for notification layer based on scale (Fanout)

@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -12,6 +13,8 @@ import { Exclude } from 'class-transformer';
 import { UserRole } from '../enum/user-role.enum';
 
 @Entity('users')
+@Index('idx_users_role', ['role'])
+@Index('idx_users_email', ['email'])
 export class User {
   @PrimaryGeneratedColumn('uuid') //index
   id: string;

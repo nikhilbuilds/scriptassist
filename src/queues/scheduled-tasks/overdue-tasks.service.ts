@@ -85,7 +85,7 @@ export class OverdueTasksService {
                 delay: 1000,
               },
               removeOnComplete: true,
-              removeOnFail: { count: 50 }, // Keep last 50 for debugging
+              removeOnFail: { count: 50 },
             },
           );
 

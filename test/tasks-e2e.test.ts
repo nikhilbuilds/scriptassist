@@ -49,7 +49,7 @@ describe('Tasks E2E Tests (RBAC)', () => {
       }),
     );
     await app.init();
-    await delay(2000);
+    await delay(1000);
     dataSource = moduleFixture.get<DataSource>(DataSource);
     await setupTestData();
   });

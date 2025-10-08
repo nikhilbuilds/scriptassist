@@ -42,7 +42,7 @@ describe('Security E2E Tests', () => {
       }),
     );
     await app.init();
-    await delay(2000);
+    await delay(1000);
     dataSource = moduleFixture.get<DataSource>(DataSource);
     await setupTestUsers();
   });
