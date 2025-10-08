@@ -12,6 +12,11 @@ import type { PublicUser } from './types/user-public.type';
 import { toPublicUser } from './utils/users.utils';
 import { normalizeEmail } from '../../common/utils/normalizers.util';
 import { ErrorCode, forbid, notFound, conflict } from '../../common/errors';
+import {
+  validateUpdateAuthorization,
+  prepareUpdateData,
+  isEmailChange,
+} from './helpers/user-update.helper';
 
 @Injectable()
 export class UsersService {
@@ -92,58 +97,62 @@ export class UsersService {
   ): Promise<PublicUser> {
     const existingUser = await this.findOne(id, currentUser);
 
-    if (currentUser.role === UserRole.USER && currentUser.id !== id) {
-      forbid(ErrorCode.USER_SELF_UPDATE_ONLY);
+    // Validate authorization
+    validateUpdateAuthorization(id, currentUser, updateUserDto);
+
+    // Prepare update data
+    const updateData = await prepareUpdateData(updateUserDto);
+
+    // Handle email change if needed
+    if (isEmailChange(updateUserDto, existingUser.email)) {
+      await this.handleEmailChange(id, existingUser.email, updateUserDto.email!);
+      updateData.email = normalizeEmail(updateUserDto.email!);
     }
 
-    if (currentUser.role === UserRole.USER && updateUserDto.role) {
-      forbid(ErrorCode.USER_ROLE_CHANGE_FORBIDDEN);
-    }
-
-    if (currentUser.role === UserRole.ADMIN && updateUserDto.role === UserRole.SUPER_ADMIN) {
-      forbid(ErrorCode.USER_ROLE_SUPER_ADMIN_FORBIDDEN);
-    }
-
-    const updateData: Partial<User> = { ...updateUserDto };
-    if (updateUserDto.password) {
-      updateData.password = await bcrypt.hash(updateUserDto.password, 10);
-    }
-
-    const oldEmail = existingUser.email;
-    let newEmail: string | undefined;
-    const emailChanged = updateUserDto.email && updateUserDto.email !== oldEmail;
-
-    if (emailChanged) {
-      newEmail = normalizeEmail(updateUserDto.email!);
-      updateData.email = newEmail;
-
-      const emailExists = await this.usersRepository.findByEmail(newEmail);
-      if (emailExists) {
-        conflict(ErrorCode.USER_EMAIL_ALREADY_EXISTS);
-      }
-
-      this.logger.warn(
-        `Email change detected for user ${id}: ${oldEmail} -> ${newEmail}. ` +
-          `TODO: Implement email verification flow (send verification email to new address).`,
-      );
-
-      // TODO: In production, implement:
-      // 1. Generate verification token
-      // 2. Send verification email to new address
-      // 3. Store pending email change with token
-      // 4. Only update email after user clicks verification link
-      // 5. Notify old email about change attempt
-    }
-
+    // Perform update
     const updatedUser = await this.usersRepository.update(id, updateData);
 
-    await this.cacheService.delete(`user:id:${id}`);
-    this.logger.debug(`Invalidated cache for user ID: ${id}`);
+    // Update cache
+    await this.updateUserCache(id, updatedUser);
 
-    const publicUser = toPublicUser(updatedUser);
-    await this.cacheService.set(`user:id:${id}`, publicUser, this.USER_CACHE_TTL);
+    return toPublicUser(updatedUser);
+  }
 
-    return publicUser;
+  private async handleEmailChange(
+    userId: string,
+    oldEmail: string,
+    newEmail: string,
+  ): Promise<void> {
+    const normalizedEmail = normalizeEmail(newEmail);
+
+    // Check if new email already exists
+    const emailExists = await this.usersRepository.findByEmail(normalizedEmail);
+    if (emailExists) {
+      conflict(ErrorCode.USER_EMAIL_ALREADY_EXISTS);
+    }
+
+    this.logger.warn(
+      `Email change detected for user ${userId}: ${oldEmail} -> ${normalizedEmail}. ` +
+        `TODO: Implement email verification flow (send verification email to new address).`,
+    );
+
+    // TODO: In production, implement:
+    // 1. Generate verification token
+    // 2. Send verification email to new address
+    // 3. Store pending email change with token
+    // 4. Only update email after user clicks verification link
+    // 5. Notify old email about change attempt
+  }
+
+  /**
+   * Updates user cache after modification
+   */
+  private async updateUserCache(userId: string, user: User): Promise<void> {
+    await this.cacheService.delete(`user:id:${userId}`);
+    this.logger.debug(`Invalidated cache for user ID: ${userId}`);
+
+    const publicUser = toPublicUser(user);
+    await this.cacheService.set(`user:id:${userId}`, publicUser, this.USER_CACHE_TTL);
   }
 
   async remove(id: string): Promise<void> {
